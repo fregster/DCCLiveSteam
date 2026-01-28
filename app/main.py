@@ -100,14 +100,14 @@ class Locomotive:
         (1) Full shutdown (force_close_only=False): Thermal faults, signal loss, etc.
             Six-stage procedure: heater off → whistle (with log save in parallel) → 
             regulator close → sleep. Log write is non-blocking and occurs during whistle
-            period to minimize total shutdown time.
+            period to minimise total shutdown time.
         (2) Force close only (force_close_only=True): E-STOP command from operator.
-            Single stage: regulator to fully closed instantly (operator still in control)
+            Two-stage procedure: heater off → regulator close instantly (no log, no sleep)
 
         Args:
             cause: Shutdown reason string ("LOGIC_HOT", "DRY_BOIL", "SUPER_HOT",
                    "PWR_LOSS", "DCC_LOST", "USER_ESTOP")
-            force_close_only: If True, only move regulator to closed position instantly.
+            force_close_only: If True, shutdown heaters and close regulator instantly.
                              If False (default), execute full shutdown sequence.
 
         Safety: 
@@ -116,21 +116,26 @@ class Locomotive:
               and provides audible alert if unattended. Log save is non-blocking and
               happens in parallel with whistle period. Flash write failures are silently
               ignored (shutdown continues regardless).
-            - E-STOP: Regulator closes instantly with emergency_mode bypass, operator
-              retains control (locomotive may coast). No heater shutdown, no deep sleep.
+            - E-STOP: Heaters killed instantly to prevent current draw (may be cause of
+              E-STOP) and halt pressure rise. Regulator closes instantly with emergency_mode
+              bypass. Operator retains control (locomotive may coast). No log save, no deep
+              sleep. If E-STOP was accidental, brief heater downtime is acceptable.
 
         Example:
             >>> loco.die("DRY_BOIL")  # Thermal fault - full shutdown
             >>> # Heaters off → whistle (log saving in parallel) → regulator closed → sleep
             >>> loco.die("USER_ESTOP", force_close_only=True)  # E-STOP command
-            >>> # Regulator closed instantly (operator in control)
+            >>> # Heaters off → regulator closed instantly (operator in control)
         """
         print("EMERGENCY SHUTDOWN:", cause)
         self.log_event("SHUTDOWN", cause)
 
         # EXCEPTION: E-STOP command from operator (force close only)
         if force_close_only:
-            # Single stage: Regulator close instantly (operator retains control)
+            # Stage 1: Instant heater cutoff (prevents current draw and pressure rise)
+            self.pressure.shutdown()
+            
+            # Stage 2: Regulator close instantly (operator retains control)
             # Enable emergency bypass for instant servo movement (no slew-rate limiting)
             self.mech.emergency_mode = True
             
@@ -139,7 +144,7 @@ class Locomotive:
             self.mech.update(self.cv)
             time.sleep(0.1)  # Brief servo movement time
             
-            # Do NOT shut down heaters, do NOT save log, do NOT enter deep sleep
+            # Do NOT save log, do NOT enter deep sleep
             # Operator may resume control if E-STOP was accidental
             return
 

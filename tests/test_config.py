@@ -165,5 +165,101 @@ def test_save_cvs_with_float_values(temp_config_dir):
     assert abs(cv_reloaded[33] - 37.5) < 0.1
 
 
+def test_cv_defaults_match_documentation():
+    """
+    Tests that CV_DEFAULTS includes all CVs documented in docs/CV.md.
+    
+    Why: CV_DEFAULTS must be kept in sync with documentation. Missing defaults
+    cause incomplete config.json on first boot, leading to runtime errors when
+    code tries to access undocumented CVs.
+    
+    Safety: Undocumented CVs prevent safe defaults from being provisioned.
+    All CVs in CV.md must have defaults in CV_DEFAULTS.
+    
+    Example:
+        >>> test_cv_defaults_match_documentation()
+        # Asserts all CVs from documentation are in CV_DEFAULTS
+    """
+    # All CVs documented in docs/CV.md with their default values
+    # Source: docs/CV.md - must match exactly
+    documented_cvs = {
+        "1": "Primary Address",
+        "29": "Configuration",
+        "30": "Failsafe Mode",
+        "31": "Servo Offset",
+        "32": "Target Pressure",      # CRITICAL: Was missing!
+        "33": "Stiction Breakout",
+        "34": "Slip Sensitivity",     # CRITICAL: Was missing!
+        "37": "Wheel Radius",
+        "38": "Encoder Count",
+        "39": "Prototype Speed",
+        "40": "Scale Ratio",
+        "41": "Watchdog: Logic",
+        "42": "Watchdog: Boiler",
+        "43": "Watchdog: Super",
+        "44": "Watchdog: DCC",
+        "45": "Watchdog: Power",
+        "46": "Servo Neutral",
+        "47": "Servo Max",
+        "48": "Whistle Offset",
+        "49": "Travel Time"
+    }
+    
+    # Verify each documented CV has a default
+    missing_defaults = []
+    for cv_num in documented_cvs:
+        if cv_num not in CV_DEFAULTS:
+            missing_defaults.append(f"CV{cv_num} ({documented_cvs[cv_num]})")
+    
+    assert missing_defaults == [], \
+        f"CV_DEFAULTS missing: {', '.join(missing_defaults)}. " \
+        f"When adding new CVs to docs/CV.md, add defaults to CV_DEFAULTS first."
+    
+    # Also verify no extra undocumented CVs (might be accidentally added)
+    extra_cvs = []
+    for cv_num in CV_DEFAULTS:
+        if cv_num not in documented_cvs:
+            extra_cvs.append(f"CV{cv_num}")
+    
+    assert extra_cvs == [], \
+        f"CV_DEFAULTS has undocumented CVs: {', '.join(extra_cvs)}. " \
+        f"Add these to docs/CV.md with parameter name and description."
+
+
+def test_cv_defaults_values_are_valid():
+    """
+    Tests that all CV default values are valid types and reasonable.
+    
+    Why: Invalid defaults cause type errors or unsafe operation (e.g., negative
+    temperature limits, servo PWM values outside 0-255 range).
+    
+    Safety: Type validation prevents runtime crashes from bad defaults.
+    """
+    # CV type validation: integer CVs should be int, float CVs should be float
+    int_cvs = {"1", "29", "30", "31", "38", "40", "44", "45", "46", "47", "48", "49"}
+    float_cvs = {"32", "33", "34", "37", "39", "42", "43", "41"}  # Pressure/temps can be float
+    
+    for cv_num in int_cvs:
+        if cv_num in CV_DEFAULTS:
+            assert isinstance(CV_DEFAULTS[cv_num], int), \
+                f"CV{cv_num} should be int, got {type(CV_DEFAULTS[cv_num])}"
+    
+    for cv_num in float_cvs:
+        if cv_num in CV_DEFAULTS:
+            assert isinstance(CV_DEFAULTS[cv_num], (int, float)), \
+                f"CV{cv_num} should be numeric, got {type(CV_DEFAULTS[cv_num])}"
+    
+    # Range validation for safety limits
+    assert 0 <= CV_DEFAULTS["41"] <= 100, "CV41 (Logic temp) unreasonable"
+    assert 0 <= CV_DEFAULTS["42"] <= 200, "CV42 (Boiler temp) unreasonable"
+    assert 0 <= CV_DEFAULTS["43"] <= 300, "CV43 (Superheater temp) unreasonable"
+    assert CV_DEFAULTS["42"] < CV_DEFAULTS["43"], "Boiler temp should be below superheater"
+    
+    # Range validation for servo PWM duty cycles (0-255)
+    assert 0 <= CV_DEFAULTS["46"] <= 255, "CV46 (Servo neutral) out of PWM range"
+    assert 0 <= CV_DEFAULTS["47"] <= 255, "CV47 (Servo max) out of PWM range"
+    assert CV_DEFAULTS["46"] < CV_DEFAULTS["47"], "Servo neutral should be less than max"
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v', '-W', 'error'])

@@ -139,15 +139,52 @@ Any user-facing function, switch, toggle, or action that can be triggered via DC
 - Each Function entry in `docs/FUNCTIONS.md` must include: function number, logic assignment, behavior type (Toggle/Momentary/Pulse/Active), and description
 - When adding a new user command, first assign it a Function number in `docs/FUNCTIONS.md`, then implement it in code
 
+**CV Maintenance Checklist (CRITICAL - Prevents Incomplete Defaults):**
+ANY time you modify CVs, you must maintain consistency across THREE locations:
+1. **docs/CV.md** - User-facing reference (CV number, parameter name, default value, unit, description)
+2. **app/config.py** - CV_DEFAULTS dictionary (must include ALL CVs from docs/CV.md)
+3. **tests/test_config.py** - Unit tests validate CV_DEFAULTS matches docs/CV.md
+
+**Required Steps When Adding/Modifying a CV:**
+```python
+# 1. UPDATE docs/CV.md FIRST (Add CSV row)
+# CV50,New Parameter,100,Unit,Description of what this controls
+
+# 2. UPDATE app/config.py CV_DEFAULTS (Add key-value)
+CV_DEFAULTS = {
+    ...
+    "50": 100,      # New Parameter (Unit)
+    ...
+}
+
+# 3. VERIFY tests pass (includes automatic CV consistency check)
+pytest tests/test_config.py::test_cv_defaults_match_documentation -v
+
+# 4. Ensure docs match code
+"""
+Args:
+    param: Configured via CV50 (New Parameter) from docs/CV.md
+"""
+```
+
+**Why This Matters (History):**
+- CVs 32 and 34 were documented but missing from CV_DEFAULTS
+- When config.json was generated on first boot, these CVs were absent
+- Any code referencing cv[32] or cv[34] would crash with KeyError
+- Test `test_cv_defaults_match_documentation()` now prevents this
+
 **Implementation Pattern:**
 ```python
 # Step 1: Add to docs/CV.md (user-facing reference)
 # CV50,New Parameter,100,Unit,Description of what this controls
 
-# Step 2: Read from CVConfig in code
+# Step 2: Add to CV_DEFAULTS in app/config.py
+"50": 100,       # New Parameter (Unit)
+
+# Step 3: Read from CVConfig in code
 new_param = self.cv[50]  # Reference as CV number, not variable name
 
-# Step 3: Add docstring reference
+# Step 4: Add docstring reference
 """
 Args:
     param: Configured via CV50 (New Parameter)
@@ -165,7 +202,7 @@ All code that runs on the TinyPICO must be in the `app/` package:
 app/
 ├── __init__.py          # Package initialization
 ├── main.py              # Locomotive class (main control loop)
-├── config.py            # CV configuration management
+├── config.py            # CV configuration management (CV_DEFAULTS + file I/O)
 ├── physics.py           # Speed/velocity calculations
 ├── sensors.py           # ADC reading (thermistors, pressure)
 ├── actuators.py         # Servo/heater control
@@ -222,18 +259,26 @@ Planning documents for future features and architectural decisions:
 - Architectural design documents
 - Performance improvement plans
 
+**`docs/implemented/`**
+**COMPLETED** feature documentation (moved from copilot-wip when finished):
+- Each feature has TWO documents:
+  - `feature-name-technical.md` - How it works (architecture, code, testing)
+  - `feature-name-capabilities.md` - What it does (user guide, examples)
+- Historical WIP documents from development
+- README.md listing all implemented features
+
 **`docs/copilot-wip/`**
-Work-in-progress tracking documents (not user-facing):
-- `COMPLIANCE_REVIEW.md` - Safety compliance audit results
-- `PROGRESS_REPORT.md` - Development progress tracking
-- `REFACTORING_SUMMARY.md` - Code refactoring history
-- `SESSION2_COMPLETION.md` - Session completion reports
+**ACTIVE** work-in-progress tracking documents (not user-facing):
+- Planning documents for pending features
+- Active development session notes
+- ⚠️ **RULE:** When feature is COMPLETE, it MUST be moved to `docs/implemented/`
 
 **Documentation Guidelines:**
 - **User docs** (root) → Clear, concise, example-driven
 - **External refs** → Standards, datasheets (read-only)
 - **Plans** → Forward-looking, design-focused
-- **WIP docs** → Development tracking, not for end users
+- **Implemented** → Completed features with technical + capabilities docs
+- **WIP docs** → Active development only, temporary documents
 
 ---
 
@@ -242,8 +287,6 @@ Work-in-progress tracking documents (not user-facing):
 ### **1. Before Writing Code**
 - Read relevant user documentation in `docs/`
 - Check external references in `docs/external-references/` for standards
-- Review safety implications (thermal limits, pressure limits, motion control)
-
 - **For configuration parameters:** Check `docs/CV.md` for existing CV numbers; assign new CV before coding
 - **For user functions:** Check `docs/FUNCTIONS.md` for existing function assignments; assign new Function before coding
 - Review safety implications (thermal limits, pressure limits, motion control)
@@ -278,36 +321,136 @@ pytest tests/test_complexity.py
 - Then implement the code referencing these documented IDs
 - Update `docs/capabilities.md` with user-friendly feature descriptions
 - Add progress notes to `docs/copilot-wip/` during active development
-### **5. Task Completion & Documentation Consolidation**
 
-When a major task or feature is complete, consolidate WIP documentation:
+### **5. Feature Completion & Documentation Migration**
 
-**A. Review and Update User Documentation**
-1. Ensure `docs/capabilities.md` reflects new features in human-readable format
-2. Update `docs/CV.md` with any new configuration variables
-3. Update `docs/FUNCTIONS.md` with new API functions
-4. Verify all examples and usage instructions are current
+⚠️ **CRITICAL RULE:** When a feature is COMPLETE and DEPLOYED, it MUST be properly documented and moved out of `docs/copilot-wip/`.
 
-**B. Archive WIP Documents**
-1. Review `docs/copilot-wip/` tracking documents (PROGRESS_REPORT.md, etc.)
-2. Extract technical details and consolidate into:
-   - **Technical reference** in `docs/plans/` - Architecture decisions, implementation details, design rationale
-   - **Human-readable summary** in `docs/capabilities.md` - Feature descriptions, usage guidance
-3. Delete or archive completed WIP tracking documents from `docs/copilot-wip/`
-4. Keep only active work-in-progress documents in `docs/copilot-wip/`
+**Feature Completion Checklist:**
+1. ✅ Implementation complete and all tests passing
+2. ✅ Feature deployed in production release (v1.x.x)
+3. ✅ Validated in real-world use (if applicable)
+4. ⚠️ **MANDATORY:** Create documentation in `docs/implemented/`
 
-**C. Documentation Lifecycle Example**
-- **During development:** Track progress in `docs/copilot-wip/FEATURE_XYZ_PROGRESS.md`
-- **On completion:** 
-  - Technical details → `docs/plans/YYYY-MM-DD_feature_xyz_implementation.md`
-  - User-facing info → Update `docs/capabilities.md`
-  - Delete `docs/copilot-wip/FEATURE_XYZ_PROGRESS.md`
+**Required Documentation (BOTH files required):**
 
-**D. Documentation Quality Check**
-- [ ] All user docs (`docs/*.md`) are clear and example-driven
-- [ ] No development jargon in `docs/capabilities.md` (user-facing)
-- [ ] Technical details properly archived in `docs/plans/`
-- [ ] `docs/copilot-wip/` contains only active WIP documents
+**A. Technical Document (`feature-name-technical.md`)**
+Template structure:
+```markdown
+# Feature Name - Technical Implementation
+
+**Component:** [Subsystem name]
+**Module:** app/[module].py
+**Version:** [X.Y.Z]
+**Safety/Performance-Critical:** YES/NO
+
+## Overview
+[High-level architecture]
+
+## Implementation
+[Code examples, algorithms, data structures]
+
+## Timing Analysis
+[Performance metrics, worst-case timing]
+
+## Configuration
+[CVs, parameters, defaults]
+
+## Testing
+[Test coverage, validation approach]
+
+## Known Limitations
+[Current constraints, future improvements]
+```
+
+**B. Capabilities Document (`feature-name-capabilities.md`)**
+Template structure:
+```markdown
+# Feature Name
+
+## What It Is
+[Simple, plain-language explanation]
+
+## What It Does
+[User-facing behavior, no technical jargon]
+
+## Why It Matters
+[Benefits, safety considerations, real value]
+
+## How to Use It
+[Step-by-step instructions with examples]
+
+## Real-World Example
+[Practical scenario showing usage]
+
+## Troubleshooting
+[Common issues and solutions]
+
+## Safety Notes
+[Warnings, precautions, limitations]
+
+**For technical details, see:** [feature-name-technical.md](feature-name-technical.md)
+```
+
+**C. Migration Steps:**
+1. Create both documents in `docs/implemented/`
+2. **Delete WIP documents** after extracting information into technical/capabilities docs
+   - ❌ DO NOT move WIP documents to docs/implemented/
+   - ❌ DO NOT keep verification/tracking documents
+   - ✅ DO extract information into proper technical/capabilities format
+3. Update `docs/implemented/README.md` with new feature entry
+4. Update user guides (CV.md, FUNCTIONS.md, capabilities.md) with cross-references
+5. Verify `docs/copilot-wip/` only contains ACTIVE work
+
+**D. Example - Emergency Shutdown Feature:**
+```bash
+# During development:
+docs/copilot-wip/EMERGENCY_SHUTDOWN_VERIFICATION.md  # WIP tracking
+
+# After completion (v1.0.0 release):
+# 1. Create proper documentation:
+docs/implemented/emergency-shutdown-technical.md      # How it works
+docs/implemented/emergency-shutdown-capabilities.md   # What it does
+docs/implemented/README.md                            # Updated with entry
+
+# 2. Delete WIP documents (info extracted):
+rm docs/copilot-wip/EMERGENCY_SHUTDOWN_VERIFICATION.md
+rm docs/copilot-wip/PHASE*_COMPLETION.md
+rm docs/copilot-wip/SESSION_COMPLETION.md
+
+# Final state - only 2 files per feature:
+docs/implemented/
+├── emergency-shutdown-technical.md
+├── emergency-shutdown-capabilities.md
+└── README.md
+```
+
+**Why This Matters:**
+- Prevents `docs/copilot-wip/` from becoming a graveyard of stale documents
+- Ensures every completed feature has proper user + developer documentation
+- Creates clear separation between active work and finished featureanywhere
+- Session completion reports (SESSION_COMPLETION.md) anywhere
+- Phase completion documents (PHASE*_COMPLETION.md) anywhere
+- Progress tracking documents in docs/implemented/
+- Duplicate documentation that belongs in existing files
+
+**Where information belongs:**
+- Release information → CHANGELOG.md
+- Feature documentation → docs/implemented/feature-name-*.md (technical + capabilities)
+- Feature index → docs/implemented/README.md
+- Project status → README.md (badges and quick stats)
+- Active planning → docs/copilot-wip/ (temporary only)
+
+**What to move to docs/implemented/:**
+- ✅ Feature-specific verification documents (e.g., EMERGENCY_SHUTDOWN_VERIFICATION.md)
+- ✅ Feature implementation designs (e.g., ESTOP_IMPLEMENTATION.md, NONBLOCKING_TELEMETRY.md)
+- ❌ Phase summaries (delete after extracting info to CHANGELOG.md)
+- ❌ Session reports (delete after extracting info to feature docs)
+- ❌ Progress tracking (delete after features documented
+- Feature documentation → docs/implemented/feature-name-*.md
+- Feature index → docs/implemented/README.md
+- Project status → README.md (badges and quick stats)
+- Phase completion tracking → docs/implemented/PHASE*_COMPLETION.md (historical WIP docs only)
 
 ---
 

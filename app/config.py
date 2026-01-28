@@ -39,8 +39,10 @@ CV_DEFAULTS = {
     "1": 3,          # DCC Address
     "29": 6,         # Configuration flags
     "30": 1,         # Distress whistle enable
-    "31": 0,         # Reserved
-    "33": 35.0,      # Target pressure (PSI)
+    "31": 0,         # Servo Offset
+    "32": 18.0,      # Target Pressure (PSI)
+    "33": 35.0,      # Stiction Breakout (%)
+    "34": 15.0,      # Slip Sensitivity (%)
     "37": 1325,      # Wheel radius (mm * 100)
     "38": 12,        # Encoder segments
     "39": 203,       # Prototype speed (km/h)

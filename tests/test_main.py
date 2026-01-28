@@ -281,15 +281,16 @@ def test_die_enters_deep_sleep(cv_table, mock_subsystems):
 
 def test_die_e_stop_force_close_only(cv_table, mock_subsystems):
     """
-    Verify die(force_close_only=True) handles E-STOP command with rapid regulator closure.
+    Verify die(force_close_only=True) handles E-STOP command with heater shutdown and rapid regulator closure.
     
-    Why: E-STOP command from DCC command station means operator is still in control.
-    Should NOT execute full shutdown sequence (heater off, whistle, log, sleep).
-    Only MUST close regulator instantly to stop locomotive motion.
+    Why: E-STOP command from DCC command station means operator is still in control
+    but immediate action is required. Heaters shut down to prevent current draw
+    (which may be the cause of E-STOP) and halt pressure rise. Brief heater downtime
+    is acceptable if E-STOP was accidental.
     
-    Safety: E-STOP is exception to full shutdown - operator may resume control if
-    E-STOP was accidental. Heaters remain on (no capacitor drain risk), locomotive
-    may coast to stop (operator still in control). No deep sleep (can restart).
+    Safety: E-STOP kills heaters instantly (prevent current surge and pressure rise)
+    then closes regulator to stop locomotive motion. No log save (operator still
+    present), no deep sleep (can restart). Operator retains control.
     """
     with patch('machine.deepsleep') as mock_deepsleep:
         loco = Locomotive(cv_table)
@@ -300,15 +301,15 @@ def test_die_e_stop_force_close_only(cv_table, mock_subsystems):
         with patch('time.sleep'):
             loco.die("USER_ESTOP", force_close_only=True)
         
+        # Should call pressure.shutdown() to kill heaters
+        mock_pressure_inst.shutdown.assert_called_once()
+        
         # Should set emergency_mode to bypass slew-rate
         assert mock_mech_inst.emergency_mode is True
         
         # Should move regulator to neutral (fully closed)
         assert mock_mech_inst.target == float(cv_table[46])
         mock_mech_inst.update.assert_called_with(cv_table)
-        
-        # Should NOT call pressure.shutdown() (heater stays on)
-        mock_pressure_inst.shutdown.assert_not_called()
         
         # Should NOT enter deep sleep (operator may resume)
         mock_deepsleep.assert_not_called()

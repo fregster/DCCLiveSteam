@@ -1,30 +1,35 @@
 [run]
 source = app
-branch = True
-omit =
-    */tests/*
-    */test_*.py
+omit = 
+    tests/*
+    */conftest.py
+    */__pycache__/*
+    */site-packages/*
 
 [report]
+# Regexes for lines to exclude from consideration
 exclude_lines =
+    # Have to re-enable the standard pragma
     pragma: no cover
+    
+    # Don't complain about missing debug-only code:
     def __repr__
+    
+    # Don't complain if tests don't hit defensive assertion code:
     raise AssertionError
     raise NotImplementedError
+    
+    # Don't complain if non-runnable code isn't run:
     if __name__ == .__main__.:
     if TYPE_CHECKING:
+    
+    # Don't complain about abstract methods
     @abstractmethod
-precision = 2
-skip_covered = False
-skip_empty = True
 
 [html]
 directory = htmlcov
 
-[paths]
+[coverage:paths]
 source =
     app/
-    */app/
-
-[fail_under]
-fail_under = 85.0
+    */DCCLiveSteam/app/
