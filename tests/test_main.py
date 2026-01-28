@@ -142,7 +142,7 @@ def test_die_shuts_down_heaters_immediately(cv_table, mock_subsystems):
     Safety: Heater shutdown executes before any blocking operations (flash write,
     whistle, servo movement).
     """
-    with patch('machine.deepsleep'):
+    with patch('machine.deepsleep'), patch('app.main.time.sleep'):
         loco = Locomotive(cv_table)
         mock_pressure_inst = mock_subsystems['pressure'].return_value
         
@@ -163,6 +163,7 @@ def test_die_saves_black_box_to_flash(cv_table, mock_subsystems):
     m_open = mock_open(read_data='[]')
     with patch('builtins.open', m_open), \
          patch('machine.deepsleep'), \
+         patch('app.main.time.sleep'), \
          patch('json.load', return_value=[]), \
          patch('json.dump') as mock_dump:
         
@@ -184,7 +185,7 @@ def test_die_enables_emergency_mode(cv_table, mock_subsystems):
     Safety: Normal operation uses gradual servo movement to prevent mechanical
     stress. Emergency shutdown requires instant response.
     """
-    with patch('machine.deepsleep'):
+    with patch('machine.deepsleep'), patch('app.main.time.sleep'):
         loco = Locomotive(cv_table)
         mock_mech_inst = mock_subsystems['mech'].return_value
         
@@ -227,18 +228,16 @@ def test_die_whistle_is_mandatory(cv_table, mock_subsystems):
     Safety: Whistle sequence is part of emergency shutdown procedure and cannot
     be disabled. CV30 parameter is deprecated and ignored in emergency shutdown.
     """
-    with patch('machine.deepsleep'):
+    with patch('machine.deepsleep'), patch('app.main.time.sleep') as mock_sleep:
         loco = Locomotive(cv_table)
         loco.cv[30] = 0  # Even with CV30=0, whistle sequence executes
         
-        # Capture time.sleep calls to verify 5s sleep is called
-        with patch('time.sleep') as mock_sleep:
-            loco.die("DCC_LOST")
-            
-            # Must have both 5.0s (whistle) and 0.5s (final servo) sleeps
-            sleep_calls = [call[0][0] for call in mock_sleep.call_args_list]
-            assert 5.0 in sleep_calls, "Whistle venting sequence must execute"
-            assert 0.5 in sleep_calls, "Final servo closure must complete"
+        loco.die("DCC_LOST")
+        
+        # Must have both 5.0s (whistle) and 0.5s (final servo) sleeps
+        sleep_calls = [call[0][0] for call in mock_sleep.call_args_list]
+        assert 5.0 in sleep_calls, "Whistle venting sequence must execute"
+        assert 0.5 in sleep_calls, "Final servo closure must complete"
 
 
 def test_die_secures_servo_to_neutral(cv_table, mock_subsystems):
@@ -251,7 +250,7 @@ def test_die_secures_servo_to_neutral(cv_table, mock_subsystems):
     Safety: Servo duty set to 0 after movement to prevent servo hunting and
     current draw during deep sleep.
     """
-    with patch('machine.deepsleep'):
+    with patch('machine.deepsleep'), patch('app.main.time.sleep'):
         loco = Locomotive(cv_table)
         mock_mech_inst = mock_subsystems['mech'].return_value
         
@@ -272,7 +271,7 @@ def test_die_enters_deep_sleep(cv_table, mock_subsystems):
     
     Safety: Prevents unattended restart after thermal event or control loss.
     """
-    with patch('machine.deepsleep') as mock_sleep:
+    with patch('machine.deepsleep') as mock_sleep, patch('app.main.time.sleep'):
         loco = Locomotive(cv_table)
         
         loco.die("TEST")
@@ -496,7 +495,7 @@ def test_emergency_shutdown_causes(cv_table, mock_subsystems):
     Safety: Each cause requires different operator response (e.g., DRY_BOIL
     needs water refill, PWR_LOSS needs track power check).
     """
-    with patch('machine.deepsleep'):
+    with patch('machine.deepsleep'), patch('app.main.time.sleep'):
         loco = Locomotive(cv_table)
         
         # Test all documented causes don't crash

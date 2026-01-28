@@ -135,35 +135,39 @@ def test_watchdog_power_loss(watchdog, mock_loco, safe_cv):
     
     Safety: Ensures controlled shutdown with remaining power.
     """
-    import time
+    from unittest.mock import patch
     
-    # First check establishes baseline
-    watchdog.check(
-        t_logic=50,
-        t_boiler=85,
-        t_super=180,
-        track_v=1000,    # Below 1500mV threshold
-        dcc_active=True,
-        cv=safe_cv,
-        loco=mock_loco
-    )
-    
-    mock_loco.die.assert_not_called()  # Not enough time elapsed
-    
-    # Wait for timeout (CV45 * 100ms = 800ms)
-    time.sleep(0.9)
-    
-    watchdog.check(
-        t_logic=50,
-        t_boiler=85,
-        t_super=180,
-        track_v=1000,
-        dcc_active=True,
-        cv=safe_cv,
-        loco=mock_loco
-    )
-    
-    mock_loco.die.assert_called_with("PWR_LOSS")
+    with patch('app.safety.time') as mock_time:
+        # Simulate ticks_ms() returning elapsed time: 0ms then 1000ms later
+        mock_time.ticks_ms.side_effect = [0, 1000]
+        # Mock ticks_diff to return time difference
+        mock_time.ticks_diff.side_effect = lambda new, old: new - old
+        
+        # First check establishes baseline
+        watchdog.check(
+            t_logic=50,
+            t_boiler=85,
+            t_super=180,
+            track_v=1000,    # Below 1500mV threshold
+            dcc_active=True,
+            cv=safe_cv,
+            loco=mock_loco
+        )
+        
+        mock_loco.die.assert_not_called()  # Not enough time elapsed
+        
+        # Simulate timeout passage (CV45 * 100ms = 800ms, we simulate 1000ms)
+        watchdog.check(
+            t_logic=50,
+            t_boiler=85,
+            t_super=180,
+            track_v=1000,
+            dcc_active=True,
+            cv=safe_cv,
+            loco=mock_loco
+        )
+        
+        mock_loco.die.assert_called_with("PWR_LOSS")
 
 
 def test_watchdog_dcc_signal_loss(watchdog, mock_loco, safe_cv):
@@ -174,35 +178,39 @@ def test_watchdog_dcc_signal_loss(watchdog, mock_loco, safe_cv):
     
     Safety: Prevents runaway if control link fails.
     """
-    import time
+    from unittest.mock import patch
     
-    # First check with active DCC
-    watchdog.check(
-        t_logic=50,
-        t_boiler=85,
-        t_super=180,
-        track_v=15000,
-        dcc_active=False,  # Signal lost
-        cv=safe_cv,
-        loco=mock_loco
-    )
-    
-    mock_loco.die.assert_not_called()
-    
-    # Wait for timeout (CV44 * 100ms = 2000ms)
-    time.sleep(2.1)
-    
-    watchdog.check(
-        t_logic=50,
-        t_boiler=85,
-        t_super=180,
-        track_v=15000,
-        dcc_active=False,
-        cv=safe_cv,
-        loco=mock_loco
-    )
-    
-    mock_loco.die.assert_called_with("DCC_LOST")
+    with patch('app.safety.time') as mock_time:
+        # Simulate ticks_ms() returning elapsed time: 0ms then 2200ms later
+        mock_time.ticks_ms.side_effect = [0, 2200]
+        # Mock ticks_diff to return time difference
+        mock_time.ticks_diff.side_effect = lambda new, old: new - old
+        
+        # First check with active DCC
+        watchdog.check(
+            t_logic=50,
+            t_boiler=85,
+            t_super=180,
+            track_v=15000,
+            dcc_active=False,  # Signal lost
+            cv=safe_cv,
+            loco=mock_loco
+        )
+        
+        mock_loco.die.assert_not_called()
+        
+        # Simulate timeout passage (CV44 * 100ms = 2000ms, we simulate 2200ms)
+        watchdog.check(
+            t_logic=50,
+            t_boiler=85,
+            t_super=180,
+            track_v=15000,
+            dcc_active=False,
+            cv=safe_cv,
+            loco=mock_loco
+        )
+        
+        mock_loco.die.assert_called_with("DCC_LOST")
 
 
 def test_watchdog_power_recovery_resets_timer(watchdog, mock_loco, safe_cv):
@@ -211,31 +219,39 @@ def test_watchdog_power_recovery_resets_timer(watchdog, mock_loco, safe_cv):
     
     Why: Brief power drops should not accumulate into timeout.
     """
-    import time
+    from unittest.mock import patch
     
-    # Drop power briefly
-    watchdog.check(
-        t_logic=50, t_boiler=85, t_super=180,
-        track_v=1000, dcc_active=True, cv=safe_cv, loco=mock_loco
-    )
-    
-    time.sleep(0.5)
-    
-    # Power restored
-    watchdog.check(
-        t_logic=50, t_boiler=85, t_super=180,
-        track_v=15000, dcc_active=True, cv=safe_cv, loco=mock_loco
-    )
-    
-    # Wait past original timeout
-    time.sleep(0.5)
-    
-    watchdog.check(
-        t_logic=50, t_boiler=85, t_super=180,
-        track_v=15000, dcc_active=True, cv=safe_cv, loco=mock_loco
-    )
-    
-    mock_loco.die.assert_not_called()  # Timer was reset
+    with patch('app.safety.time') as mock_time:
+        # Simulate ticks_ms() progression: 0ms → 500ms → 600ms → 1100ms
+        mock_time.ticks_ms.side_effect = [0, 500, 600, 1100]
+        # Mock ticks_diff to return time difference
+        mock_time.ticks_diff.side_effect = lambda new, old: new - old
+        
+        # Drop power briefly
+        watchdog.check(
+            t_logic=50, t_boiler=85, t_super=180,
+            track_v=1000, dcc_active=True, cv=safe_cv, loco=mock_loco
+        )
+        
+        # Simulate 500ms passing with power lost
+        watchdog.check(
+            t_logic=50, t_boiler=85, t_super=180,
+            track_v=1000, dcc_active=True, cv=safe_cv, loco=mock_loco
+        )
+        
+        # Power restored at 600ms (timer resets)
+        watchdog.check(
+            t_logic=50, t_boiler=85, t_super=180,
+            track_v=15000, dcc_active=True, cv=safe_cv, loco=mock_loco
+        )
+        
+        # Now at 1100ms - 600ms reset = 500ms elapsed since recovery (under 800ms limit)
+        watchdog.check(
+            t_logic=50, t_boiler=85, t_super=180,
+            track_v=15000, dcc_active=True, cv=safe_cv, loco=mock_loco
+        )
+        
+        mock_loco.die.assert_not_called()  # Timer was reset
 
 
 def test_watchdog_multiple_simultaneous_faults(watchdog, mock_loco, safe_cv):
