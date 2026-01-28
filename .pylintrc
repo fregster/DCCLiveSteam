@@ -1,0 +1,31 @@
+[MASTER]
+max-line-length=120
+fail-under=9.9
+disable=
+    C0111,  # missing-docstring (we check this separately)
+    R0913,  # too-many-arguments (common in embedded systems)
+    R0914,  # too-many-locals (acceptable for main loops)
+    W0613,  # unused-argument (callbacks often have unused params)
+    C0103,  # invalid-name (allow single-char vars in math)
+    E0401,  # import-error (MicroPython modules not available in test env)
+    E1101,  # no-member (MicroPython extensions to standard modules)
+    R0903,  # too-few-public-methods (watchdog has single check method)
+    R0902,  # too-many-instance-attributes (sensor suite needs many ADC objects)
+    R0917,  # too-many-positional-arguments (safety check needs all sensor readings)
+    W0718,  # broad-exception-caught (embedded systems need catch-all error handling)
+    C0411   # wrong-import-order (micropython imports are special)
+
+[DESIGN]
+max-args=8
+max-locals=15
+max-returns=6
+max-branches=13
+max-statements=50
+
+[BASIC]
+good-names=i,j,k,x,y,z,f,cv,dt,v,t
+
+[SIMILARITIES]
+min-similarity-lines=4
+ignore-comments=yes
+ignore-docstrings=yes

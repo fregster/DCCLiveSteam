@@ -1,0 +1,30 @@
+[run]
+source = app
+branch = True
+omit =
+    */tests/*
+    */test_*.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+precision = 2
+skip_covered = False
+skip_empty = True
+
+[html]
+directory = htmlcov
+
+[paths]
+source =
+    app/
+    */app/
+
+[fail_under]
+fail_under = 85.0
