@@ -187,9 +187,10 @@ def test_cv_defaults_match_documentation():
         "29": "Configuration",
         "30": "Failsafe Mode",
         "31": "Servo Offset",
-        "32": "Target Pressure",      # CRITICAL: Was missing!
+        "32": "Target Pressure",
+        "35": "Max Boiler Pressure",
         "33": "Stiction Breakout",
-        "34": "Slip Sensitivity",     # CRITICAL: Was missing!
+        "34": "Slip Sensitivity",
         "37": "Wheel Radius",
         "38": "Encoder Count",
         "39": "Prototype Speed",
@@ -203,6 +204,7 @@ def test_cv_defaults_match_documentation():
         "47": "Servo Max",
         "48": "Whistle Offset",
         "49": "Travel Time",
+        "51": "Power Budget",
         "84": "Graceful Degradation",
         "87": "Decel Rate",
         "88": "Degraded Timeout"
@@ -273,23 +275,23 @@ def test_validate_cv_valid_update(temp_config_dir):
     
     Why: Valid CV values within safe bounds should be accepted and applied.
     
-    Example: CV32 (pressure) = 20.0 PSI (within 15.0-25.0 range)
+    Example: CV32 (pressure) = 20.0 PSI (within 10.0-30.0 range)
     """
     from app.config import validate_and_update_cv
     
-    cv_table = {32: 18.0}  # Current value
-    success, message = validate_and_update_cv(32, "20.0", cv_table)
+    cv_table = {32: 124.0}  # Current value (kPa)
+    success, message = validate_and_update_cv(32, "150.0", cv_table)
     
     assert success is True
     assert "Updated CV32" in message
-    assert cv_table[32] == 20.0
+    assert cv_table[32] == 150.0
 
 
 def test_validate_cv_out_of_range(temp_config_dir):
     """
     Tests CV validation rejects out-of-range values.
     
-    Why: Out-of-range values (e.g., boiler temp > 120°C) could cause thermal
+    Why: Out-of-range values (e.g., boiler temp > 120°C or pressure > 30 PSI) could cause thermal
     runaway or equipment damage.
     
     Safety: Validation bounds prevent operator errors.
@@ -297,8 +299,8 @@ def test_validate_cv_out_of_range(temp_config_dir):
     from app.config import validate_and_update_cv
     
     cv_table = {32: 18.0}
-    success, message = validate_and_update_cv(32, "30.0", cv_table)  # Above 25.0 max
-    
+    success, message = validate_and_update_cv(32, "31.0", cv_table)  # Above 30.0 max
+
     assert success is False
     assert "out of range" in message
     assert cv_table[32] == 18.0  # Value unchanged
@@ -361,11 +363,11 @@ def test_validate_cv_float_parsing(temp_config_dir):
     """
     from app.config import validate_and_update_cv
     
-    cv_table = {32: 18.0}
-    success, message = validate_and_update_cv(32, "20.5", cv_table)
+    cv_table = {32: 124.0}
+    success, message = validate_and_update_cv(32, "150.5", cv_table)
     
     assert success is True
-    assert cv_table[32] == 20.5
+    assert cv_table[32] == 150.5
     assert isinstance(cv_table[32], float)
 
 
@@ -373,22 +375,22 @@ def test_validate_cv_boundary_values(temp_config_dir):
     """
     Tests CV validation accepts exact min/max boundary values.
     
-    Why: Boundary values (e.g., CV32=15.0 or 25.0 PSI) should be accepted
+    Why: Boundary values (e.g., CV32=10.0 or 30.0 PSI) should be accepted
     as valid (inclusive bounds).
     """
     from app.config import validate_and_update_cv
     
-    cv_table = {32: 18.0}
+    cv_table = {32: 124.0}
     
-    # Test minimum boundary
-    success_min, msg_min = validate_and_update_cv(32, "15.0", cv_table)
+    # Test minimum boundary (kPa)
+    success_min, msg_min = validate_and_update_cv(32, "70.0", cv_table)
     assert success_min is True
-    assert cv_table[32] == 15.0
+    assert cv_table[32] == 70.0
     
-    # Test maximum boundary
-    success_max, msg_max = validate_and_update_cv(32, "25.0", cv_table)
+    # Test maximum boundary (kPa)
+    success_max, msg_max = validate_and_update_cv(32, "207.0", cv_table)
     assert success_max is True
-    assert cv_table[32] == 25.0
+    assert cv_table[32] == 207.0
 
 
 def test_validate_cv_preserves_old_value_on_error(temp_config_dir):

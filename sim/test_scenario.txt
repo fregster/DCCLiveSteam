@@ -1,0 +1,34 @@
+# sim/test_scenario.txt
+# Automated scenario for simulation CLI
+
+# 1. Start the system and run the cold-to-working startup
+scenario startup
+
+# 2. Wait for system to be ready (max 10 seconds)
+wait 10
+
+# 3. Set speed to 100%
+dcc speed 100
+
+# 4. Wait 30 seconds
+wait 30
+
+# 5. Trigger E-STOP (assume function 12 is E-STOP)
+dcc function 12 on
+
+# 6. Wait 2 seconds
+wait 2
+
+# 7. Reset E-STOP
+dcc function 12 off
+
+# 8. Set speed to 50%
+dcc speed 50
+
+# 9. Simulate pressure runaway (set pressure to 5 bar)
+sensor pressure 5.0
+
+# 10. Wait 5 seconds to monitor for safe shutdown
+wait 5
+
+# End of scenario

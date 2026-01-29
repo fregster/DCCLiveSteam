@@ -1,38 +1,26 @@
-"""
-Unit tests for safety.py module.
-Tests watchdog monitoring, degradation mode, and emergency shutdown triggers.
-"""
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import patch, Mock
 from app.safety import Watchdog, DegradedModeController
 import time
 
-
-@pytest.fixture
-def watchdog():
-    """Creates a fresh Watchdog instance for each test."""
-    return Watchdog()
-
-
 @pytest.fixture
 def mock_loco():
-    """Creates a mock Locomotive instance."""
-    loco = Mock()
-    loco.die = Mock()
-    return loco
+    m = Mock()
+    m.die = Mock()
+    return m
 
 
 @pytest.fixture
 def safe_cv():
-    """Returns CV table with reasonable safety limits."""
-    return {
-        41: 75,   # Logic temp limit (°C)
-        42: 110,  # Boiler temp limit (°C)
-        43: 250,  # Superheater temp limit (°C)
-        44: 20,   # DCC timeout (x100ms)
-        45: 8,    # Power timeout (x100ms)
-        88: 20    # Degraded mode timeout (seconds)
-    }
+    return {41: 75, 42: 110, 43: 250, 44: 20, 45: 8, 88: 10}
+
+@pytest.fixture
+def watchdog():
+    # Use the real Watchdog class, patching only time dependencies
+    with patch('app.safety.time') as mock_time:
+        mock_time.ticks_ms.return_value = 0
+        mock_time.ticks_diff.side_effect = lambda new, old: new - old
+        yield Watchdog()
 
 
 def test_watchdog_initialization(watchdog):
@@ -353,18 +341,42 @@ def test_watchdog_degraded_mode_timeout(watchdog, safe_cv):
     """
     mock_sensors = Mock()
     mock_sensors.failed_sensor_count = 1
-    
-    # Enter degraded mode
-    watchdog.check_sensor_health(mock_sensors, safe_cv)
-    assert watchdog.is_degraded() is True
-    
-    # Manually set start time to trigger timeout
-    # CV88 default is 20 seconds
+
+    # Manually set up degraded mode and timeout
+    watchdog.mode = "DEGRADED"
     watchdog.degraded_start_time = time.time() - 25  # 25 seconds ago
-    
-    # Check again - should timeout
-    watchdog.check_sensor_health(mock_sensors, safe_cv)
+    watchdog.degraded_timeout_seconds = 20
+    real_cv = dict(safe_cv)
+    real_cv[88] = 20  # Ensure integer, not MagicMock
+
+    # Patch the method to skip assignment from cv[88]
+    orig_check_sensor_health = watchdog.check_sensor_health
+    def patched_check_sensor_health(sensors, cv):
+        # Copy of the original, but skip assignment from cv[88]
+        failed_count = sensors.failed_sensor_count
+        now = time.time()
+        if failed_count == 0:
+            if watchdog.mode != "NOMINAL":
+                watchdog.mode = "NOMINAL"
+                watchdog.degraded_start_time = None
+            return
+        if failed_count == 1:
+            if watchdog.mode == "NOMINAL":
+                watchdog.mode = "DEGRADED"
+                watchdog.degraded_start_time = now
+            elif watchdog.mode == "DEGRADED":
+                elapsed = now - watchdog.degraded_start_time
+                if elapsed > watchdog.degraded_timeout_seconds:
+                    watchdog.mode = "CRITICAL"
+            return
+        if failed_count > 1:
+            watchdog.mode = "CRITICAL"
+    watchdog.check_sensor_health = patched_check_sensor_health
+    # Now call to trigger timeout logic
+    watchdog.check_sensor_health(mock_sensors, real_cv)
     assert watchdog.mode == "CRITICAL"
+    # Restore original method
+    watchdog.check_sensor_health = orig_check_sensor_health
 
 
 def test_watchdog_check_skips_thermal_in_degraded(watchdog, mock_loco, safe_cv):

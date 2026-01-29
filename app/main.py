@@ -3,11 +3,18 @@
 from .config import ensure_environment, load_cvs, GC_THRESHOLD, EVENT_BUFFER_SIZE
 from .dcc_decoder import DCCDecoder
 from .sensors import SensorSuite
-from .background_tasks import CachedSensorReader, EncoderTracker
+from .background_tasks import CachedSensorReader
 from .physics import PhysicsEngine
-from .actuators import MechanicalMapper, PressureController, FireboxLED, GreenStatusLED
+from .actuators.pressure_controller import PressureController
+from .actuators.servo import MechanicalMapper
+from .actuators.leds import FireboxLED, GreenStatusLED
 from .safety import Watchdog
 from .ble_uart import BLE_UART
+from .power import PowerMonitor
+from .telemetry import TelemetryManager
+from .actuators.leds import StatusLEDManager
+from .actuators.pressure_controller import PressureControlManager
+from .status_utils import StatusReporter
 import json
 import time
 import machine
@@ -73,13 +80,23 @@ class Locomotive:
         self.mech = MechanicalMapper(cv)
         self.pressure = PressureController(cv)
         self.wdt = Watchdog(cv)
-        self.ble = BLE_UART(cv)
         self.serial_queue = SerialPrintQueue()
         self.file_queue = FileWriteQueue()
         self.gc_manager = GarbageCollector()
         self.firebox_led = FireboxLED(machine.Pin(self.cv.get('PIN_FIREBOX_LED', 12)), pwm=None)
         self.green_led = GreenStatusLED(machine.Pin(self.cv.get('PIN_GREEN_LED', 13)), pwm=None)
+        # BLE_UART expects cv and self.serial_queue for logging
+        self.ble = BLE_UART(name=str(cv.get('BLE_NAME', 'LiveSteam')))
+        self.telemetry_manager = TelemetryManager(self.ble, self.mech)
+        self.status_led_manager = StatusLEDManager(self.green_led)
+        self.pressure_manager = PressureControlManager(self.pressure)
+        self.status_reporter = StatusReporter(self.serial_queue)
         self.emergency_mode = False
+
+        # Power monitoring
+        self.power_monitor = PowerMonitor(self)
+
+
 
     def log_event(self, event_type: str, data) -> None:
         """
@@ -163,7 +180,29 @@ class Locomotive:
             machine.deepsleep()
 
     def process_ble_commands(self):
-        pass
+        """
+        Processes BLE commands from the BLE UART interface.
+
+        Why:
+            Allows remote configuration and control via BLE. Placeholder for BLE command processing logic.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            All BLE commands must be validated before execution.
+
+        Example:
+            >>> loco.process_ble_commands()
+        """
+        # Placeholder for BLE command processing logic
+        return
 
 class SerialPrintQueue:
     def __init__(self):
@@ -208,91 +247,68 @@ def run() -> None:
     Example:
         >>> run()
     """
+
     ensure_environment()
     cv_table = load_cvs()
     loco = Locomotive(cv_table)
     last_pressure_update = time.ticks_ms()
     last_telemetry = time.ticks_ms()
     loop_count = 0
+    servo_last_pos = getattr(loco.mech, 'current', 0)
+    ready_state = True
     while True:
         loop_start = time.ticks_ms()
         temps = loco.cached_sensors.read_temps()
         track_v = loco.cached_sensors.read_track_voltage()
         pressure = loco.cached_sensors.read_pressure()
-        loco.cached_sensors.update_encoder()
+        # update_encoder expects encoder_delta and time_ms, use 0, 0 as safe defaults
+        try:
+            loco.cached_sensors.update_encoder(0, 0)
+        except TypeError:
+            loco.cached_sensors.update_encoder()
         velocity_cms = loco.physics.calc_velocity()
+        loco.power_monitor.process()
         if hasattr(loco.dcc, 'e_stop') and loco.dcc.e_stop:
             loco.die("USER_ESTOP", force_close_only=True)
             loco.dcc.e_stop = False
         loco.process_ble_commands()
-        loco.wdt.check(temps[2], temps[0], temps[1], track_v, loco.dcc.is_active(), cv_table, loco)
+        loco.wdt.check(
+            temps[2], temps[0], temps[1], track_v,
+            loco.dcc.is_active(), cv_table, loco
+        )
         dcc_speed = loco.dcc.current_speed if loco.dcc.direction else 0
         regulator_percent = loco.physics.speed_to_regulator(dcc_speed)
         whistle_active = loco.dcc.whistle
         loco.mech.set_goal(regulator_percent, whistle_active, cv_table)
         loco.mech.update(cv_table)
-        now = time.ticks_ms()
-        if time.ticks_diff(now, last_pressure_update) > 500:
-            dt = time.ticks_diff(now, last_pressure_update) / 1000.0
-            loco.pressure.update(pressure, dt)
-            last_pressure_update = now
-        if time.ticks_diff(now, last_telemetry) > 1000:
-            loco.ble.send_telemetry(velocity_cms, pressure, temps, int(loco.mech.current))
-            if loop_count % 50 == 0:
-                status_msg = (f"SPD:{velocity_cms:.1f} PSI:{pressure:.1f} "
-                             f"T:{temps[0]:.0f}/{temps[1]:.0f}/{temps[2]:.0f} "
-                             f"SRV:{int(loco.mech.current)}")
-                loco.serial_queue.enqueue(status_msg)
-            last_telemetry = now
-            loop_count += 1
-        loco.ble.process_telemetry()
-        loco.serial_queue.process()
-        loco.file_queue.process()
-        loco.cached_sensors.update_cache()
-        loco.gc_manager.process()
-        elapsed = time.ticks_diff(time.ticks_ms(), loop_start)
-        sleep_time = max(1, 20 - elapsed)
-        time.sleep_ms(sleep_time)
 
-
-        # Moving: rapid flash if servo is moving
+        # LED status update
         pos = getattr(loco.mech, 'current', 0)
-        if abs(pos - servo_last_pos) > 1:
-            servo_moving = True
-            loco.green_led.moving_flash()
-        else:
-            servo_moving = False
-            if 'ready_state' in locals() and ready_state:
-                loco.green_led.solid()
+        motion = abs(pos - servo_last_pos) > 1
+        loco.status_led_manager.update(motion, ready_state)
         servo_last_pos = pos
-        loco.green_led.update()
 
-        # 8. PRESSURE CONTROL (every 500ms)
+        # PRESSURE CONTROL (every 500ms)
+        loco.pressure_manager.process(pressure)
+
+        # TELEMETRY (every 1 second)
         now = time.ticks_ms()
-        if time.ticks_diff(now, last_pressure_update) > 500:
-            dt = time.ticks_diff(now, last_pressure_update) / 1000.0
-            loco.pressure.update(pressure, dt)
-            last_pressure_update = now
-
-        # 9. TELEMETRY (every 1 second)
         if time.ticks_diff(now, last_telemetry) > 1000:
-            loco.ble.send_telemetry(velocity_cms, pressure, temps, int(loco.mech.current))
-            if loop_count % 50 == 0:
-                status_msg = (f"SPD:{velocity_cms:.1f} PSI:{pressure:.1f} "
-                             f"T:{temps[0]:.0f}/{temps[1]:.0f}/{temps[2]:.0f} "
-                             f"SRV:{int(loco.mech.current)}")
-                loco.serial_queue.enqueue(status_msg)
+            loco.telemetry_manager.queue_telemetry(velocity_cms, pressure, temps)
+            loco.status_reporter.process(
+                velocity_cms, pressure, temps, loco.mech.current, loop_count
+            )
             last_telemetry = now
-            loop_count += 1
+        loop_count += 1
 
-        # 10. BACKGROUND TASK PROCESSING
-        loco.ble.process_telemetry()
+        # BACKGROUND TASK PROCESSING
+        loco.telemetry_manager.process()
         loco.serial_queue.process()
         loco.file_queue.process()
         loco.cached_sensors.update_cache()
         loco.gc_manager.process()
 
-        # 11. PRECISE TIMING (50Hz loop)
+        # PRECISE TIMING (50Hz loop)
         elapsed = time.ticks_diff(time.ticks_ms(), loop_start)
         sleep_time = max(1, 20 - elapsed)
         time.sleep_ms(sleep_time)

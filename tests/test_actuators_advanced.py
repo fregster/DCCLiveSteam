@@ -3,7 +3,7 @@ Advanced slew-rate limiting and emergency bypass tests for actuators.
 Covers edge cases, rapid command changes, and repeated emergency triggers.
 """
 import pytest
-from app.actuators import MechanicalMapper
+from app.actuators.servo import MechanicalMapper
 
 def test_slew_rate_limit_multiple_steps():
     """

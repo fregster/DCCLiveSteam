@@ -26,7 +26,7 @@ This code controls a **live steam locomotive** with:
 1. **Create unit tests first** in `tests/` directory matching module structure
    - Example: `sensors.py` → `tests/test_sensors.py`
 2. **All tests must pass with ZERO warnings**
-   - Use `pytest -W error` (treats warnings as failures)
+    - Use `pytest -W error` (treats warnings as failures). This is mandatory for all test runs, including CI and local development. Any warning (Deprecation, Resource, User, etc.) must be treated as a test failure and fixed immediately.
 3. **Include edge case testing:**
    - Boundary values (0, max, overflow)
    - Invalid inputs (None, negative, out-of-range)
@@ -37,7 +37,7 @@ This code controls a **live steam locomotive** with:
 
 ### **Code Quality Gates**
 All Python code must pass:
-- ✅ **Strict linting:** `pylint` with score ≥ 9.0/10
+- ✅ **Strict linting:** `pylint` with score ≥ 9.0/10 (no errors, only minor style warnings permitted)
 - ✅ **Type hints:** All function signatures must have type annotations
 - ✅ **Cognitive complexity:** ≤ 15 per function (SonarQube standard)
 - ✅ **Test coverage:** ≥ 85% line coverage minimum
@@ -365,8 +365,9 @@ Ongoing session development?
 
 ### **3. Code Quality Validation**
 ```bash
-# Run tests with coverage
-pytest --cov=app --cov-report=html tests/
+
+# Run tests with coverage and treat warnings as errors
+pytest -W error --cov=app --cov-report=html tests/
 
 # Check code quality
 pylint app/*.py --rcfile=.pylintrc

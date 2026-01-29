@@ -3,7 +3,8 @@ CV,Parameter,Default,Unit,Description
 29,Configuration,6,Bit,Bit 1: 128-step mode; Bit 2: DC Enable.
 30,Failsafe Mode,1,Bool,"1 = ""Distress Whistle"" on shutdown; 0 = Silent."
 31,Servo Offset,0,PWM,Fine-tunes the physical neutral (closed) point.
-32,Target Pressure,18.0,PSI,The desired operating steam pressure (124 kPa; 18.0 PSI).
+32,Target Pressure,124.0,kPa,The desired operating steam pressure (default 124 kPa; 18.0 PSI reference).
+35,Max Boiler Pressure,207.0,kPa,Maximum allowed boiler pressure (user limit, default 207 kPa; 30 PSI reference, Hornby safety valve). System will shut down if exceeded.
 33,Stiction Breakout,35.0,%,Momentary regulator kick to start from a dead stop.
 34,Slip Sensitivity,15.0,%,Threshold for wheel-slip detection vs. ground speed.
 37,Wheel Radius,1325,0.01mm,"Radius of the driving wheels (e.g., 1325 = 13.25mm)."
@@ -21,4 +22,5 @@ CV,Parameter,Default,Unit,Description
 49,Travel Time,1000,ms,Time to sweep from 0% to 100% regulator open.
 84,Graceful Degradation,1,Bool,"1 = Smooth deceleration on sensor failure; 0 = Immediate shutdown."
 87,Decel Rate,10.0,cm/s²,Speed of controlled deceleration during sensor failure graceful shutdown.
-88,Degraded Timeout,20,s,Maximum time allowed in degraded mode before forced shutdown.
+
+51,Power Budget,4.5,Amps,Maximum total system current draw (all loads). System will shed non-critical loads or reduce power to stay within this limit. Exceeding this triggers a safety shutdown.

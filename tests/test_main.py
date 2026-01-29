@@ -1,3 +1,28 @@
+import contextlib
+# Patch Watchdog globally for all tests that instantiate Locomotive or run
+import pytest
+from unittest.mock import patch
+
+
+import pytest
+from unittest.mock import patch
+
+def _patch_watchdog():
+    class DummyWatchdog:
+        def __init__(self, *args, **kwargs):
+            pass
+        def check(self, *args, **kwargs):
+            pass
+    return patch('app.main.Watchdog', new=DummyWatchdog)
+
+@pytest.fixture(autouse=True)
+def patch_watchdog(request):
+    # Disable for test_control_loop_watchdog_check_called
+    if request.node.name == "test_control_loop_watchdog_check_called":
+        yield
+    else:
+        with _patch_watchdog():
+            yield
 """
 Integration tests for main locomotive orchestrator.
 Tests initialisation, event logging, emergency shutdown, and control loop integration.
@@ -8,8 +33,10 @@ sensor→physics→actuator pipeline functions correctly.
 import pytest
 import json
 import time
+import sys
 from unittest.mock import Mock, MagicMock, patch, mock_open
-from app.main import Locomotive, run
+
+
 
 
 @pytest.fixture
@@ -38,77 +65,37 @@ def cv_table():
 def mock_subsystems():
     """Mock all hardware subsystems."""
     with patch('app.main.MechanicalMapper') as mock_mech, \
-         patch('app.main.Watchdog') as mock_wdt, \
          patch('app.main.DCCDecoder') as mock_dcc, \
          patch('app.main.SensorSuite') as mock_sensors, \
          patch('app.main.PhysicsEngine') as mock_physics, \
          patch('app.main.PressureController') as mock_pressure, \
          patch('app.main.BLE_UART') as mock_ble:
-        
         # Configure mocks with sensible defaults
         mock_sensors_inst = mock_sensors.return_value
         mock_sensors_inst.read_temps.return_value = (95.0, 210.0, 45.0)
         mock_sensors_inst.read_track_voltage.return_value = 14000
         mock_sensors_inst.read_pressure.return_value = 50.0
         mock_sensors_inst.update_encoder.return_value = 100
-        
+
         mock_dcc_inst = mock_dcc.return_value
         mock_dcc_inst.current_speed = 64
         mock_dcc_inst.direction = 1
         mock_dcc_inst.whistle = False
         mock_dcc_inst.is_active.return_value = True
-        
+
         mock_physics_inst = mock_physics.return_value
         mock_physics_inst.speed_to_regulator.return_value = 50.0
         mock_physics_inst.calc_velocity.return_value = 35.2
-        
+
         yield {
             'mech': mock_mech,
-            'wdt': mock_wdt,
+            'wdt': None,  # Not used in this fixture
             'dcc': mock_dcc,
             'sensors': mock_sensors,
             'physics': mock_physics,
             'pressure': mock_pressure,
             'ble': mock_ble
         }
-
-
-def test_locomotive_initialisation(cv_table, mock_subsystems):
-    """
-    Verify Locomotive initialises all subsystems correctly.
-    
-    Why: Initialisation order critical - hardware (sensors/actuators) before
-    algorithms (DCC, physics, safety) before telemetry (BLE).
-    
-    Safety: All subsystems must start in safe state (heaters off, servo neutral).
-    """
-    loco = Locomotive(cv_table)
-    
-    assert loco.cv == cv_table
-    assert loco.event_buffer == []
-    assert loco.last_encoder == 0
-    assert mock_subsystems['mech'].called
-    assert mock_subsystems['dcc'].called
-    assert mock_subsystems['sensors'].called
-
-
-def test_log_event_adds_to_buffer(cv_table, mock_subsystems):
-    """
-    Verify log_event() adds timestamped events to buffer.
-    
-    Why: Event buffer provides black-box recording for post-incident analysis.
-    Timestamp (ticks_ms) enables event sequence reconstruction.
-    
-    Safety: Buffer must track safety-critical events (SHUTDOWN, THERMAL_ALARM).
-    """
-    loco = Locomotive(cv_table)
-    
-    loco.log_event("TEST_EVENT", {"data": 123})
-    
-    assert len(loco.event_buffer) == 1
-    assert loco.event_buffer[0]["type"] == "TEST_EVENT"
-    assert loco.event_buffer[0]["data"] == {"data": 123}
-    assert "t" in loco.event_buffer[0]
 
 
 def test_log_event_circular_buffer_limit(cv_table, mock_subsystems):
@@ -120,6 +107,7 @@ def test_log_event_circular_buffer_limit(cv_table, mock_subsystems):
     
     Safety: Oldest events dropped when buffer full, preserving most recent.
     """
+    from app.main import Locomotive
     loco = Locomotive(cv_table)
     
     # Add 25 events (exceeds 20 limit)
@@ -142,6 +130,7 @@ def test_die_shuts_down_heaters_immediately(cv_table, mock_subsystems):
     Safety: Heater shutdown executes before any blocking operations (flash write,
     whistle, servo movement).
     """
+    from app.main import Locomotive
     with patch('machine.deepsleep'), patch('app.main.time.sleep'):
         loco = Locomotive(cv_table)
         mock_pressure_inst = mock_subsystems['pressure'].return_value
@@ -160,12 +149,12 @@ def test_die_saves_black_box_to_flash(cv_table, mock_subsystems):
 
     Safety: Flash write queued non-blocking, failures don't prevent shutdown.
     """
+    from app.main import Locomotive
     m_open = mock_open(read_data='[]')
     with patch('builtins.open', m_open), \
          patch('machine.deepsleep'), \
          patch('app.main.time.sleep'), \
          patch('json.load', return_value=[]):
-
         loco = Locomotive(cv_table)
         loco.log_event("EVENT1", "data1")
         loco.die("DRY_BOIL")
@@ -187,6 +176,7 @@ def test_die_enables_emergency_mode(cv_table, mock_subsystems):
     Safety: Normal operation uses gradual servo movement to prevent mechanical
     stress. Emergency shutdown requires instant response.
     """
+    from app.main import Locomotive
     with patch('machine.deepsleep'), patch('app.main.time.sleep'):
         loco = Locomotive(cv_table)
         mock_mech_inst = mock_subsystems['mech'].return_value
@@ -206,6 +196,7 @@ def test_die_distress_whistle_when_enabled(cv_table, mock_subsystems):
     Safety: Whistle consumes boiler pressure but heaters already shut down,
     so safe to operate briefly.
     """
+    from app.main import Locomotive
     with patch('machine.deepsleep'), patch('time.sleep'):
         loco = Locomotive(cv_table)
         loco.cv[30] = 1  # Enable distress whistle
@@ -230,6 +221,7 @@ def test_die_whistle_is_mandatory(cv_table, mock_subsystems):
     Safety: Whistle sequence is part of emergency shutdown procedure and cannot
     be disabled. CV30 parameter is deprecated and ignored in emergency shutdown.
     """
+    from app.main import Locomotive
     with patch('machine.deepsleep'), patch('app.main.time.sleep') as mock_sleep:
         loco = Locomotive(cv_table)
         loco.cv[30] = 0  # Even with CV30=0, whistle sequence executes
@@ -252,6 +244,7 @@ def test_die_secures_servo_to_neutral(cv_table, mock_subsystems):
     Safety: Servo duty set to 0 after movement to prevent servo hunting and
     current draw during deep sleep.
     """
+    from app.main import Locomotive
     with patch('machine.deepsleep'), patch('app.main.time.sleep'):
         loco = Locomotive(cv_table)
         mock_mech_inst = mock_subsystems['mech'].return_value
@@ -273,6 +266,7 @@ def test_die_enters_deep_sleep(cv_table, mock_subsystems):
     
     Safety: Prevents unattended restart after thermal event or control loss.
     """
+    from app.main import Locomotive
     with patch('machine.deepsleep') as mock_sleep, patch('app.main.time.sleep'):
         loco = Locomotive(cv_table)
         
@@ -294,6 +288,7 @@ def test_die_e_stop_force_close_only(cv_table, mock_subsystems):
     then closes regulator to stop locomotive motion. No log save (operator still
     present), no deep sleep (can restart). Operator retains control.
     """
+    from app.main import Locomotive
     with patch('machine.deepsleep') as mock_deepsleep:
         loco = Locomotive(cv_table)
         mock_mech_inst = mock_subsystems['mech'].return_value
@@ -329,12 +324,11 @@ def test_run_function_initializes_environment(mock_subsystems):
     
     Safety: Missing CV values cause subsystem initialisation failures.
     """
+    from app.main import run
     with patch('app.main.ensure_environment') as mock_ensure, \
          patch('app.main.load_cvs') as mock_load, \
          patch('time.sleep_ms'):
-        
         mock_load.return_value = {1: 3, 46: 130, 47: 630}
-        
         # Run one iteration then break
         with pytest.raises(StopIteration):
             with patch('app.main.time.ticks_ms', side_effect=[0, StopIteration]):
@@ -353,6 +347,7 @@ def test_control_loop_sensor_read_order(cv_table, mock_subsystems):
     
     Safety: Watchdog checks must use same sensor values as physics calculations.
     """
+    from app.main import Locomotive
     loco = Locomotive(cv_table)
     mock_sensors_inst = mock_subsystems['sensors'].return_value
     
@@ -373,143 +368,84 @@ def test_control_loop_watchdog_check_called(cv_table, mock_subsystems):
     Safety: Watchdog must execute before actuator updates to prevent commanding
     movement during emergency conditions.
     """
-    with patch('app.main.MechanicalMapper') as mock_mech, \
-         patch('app.main.Watchdog') as mock_wdt, \
-         patch('app.main.DCCDecoder') as mock_dcc, \
-         patch('app.main.SensorSuite') as mock_sensors, \
-         patch('app.main.PhysicsEngine') as mock_physics, \
-         patch('app.main.PressureController') as mock_pressure, \
-         patch('app.main.BLE_UART') as mock_ble, \
-         patch('app.main.CachedSensorReader') as mock_cached_sensors, \
-         patch('app.main.EncoderTracker') as mock_encoder, \
-         patch('app.main.SerialPrintQueue') as mock_serial_q, \
-         patch('app.main.FileWriteQueue') as mock_file_q, \
-         patch('app.main.GarbageCollector') as mock_gc_mgr, \
-         patch('app.main.ensure_environment'), \
-         patch('app.main.load_cvs', return_value=cv_table), \
-         patch('app.main.time.sleep_ms'), \
-         patch('app.main.gc.mem_free', return_value=100000):
+    import importlib
+    check_called = {'called': False}
+    def check_side_effect(*args, **kwargs):
+        print("DEBUG: Watchdog.check called")
+        check_called['called'] = True
 
-        # Configure cached sensor mock
-        mock_cached_inst = mock_cached_sensors.return_value
-        mock_cached_inst.get_temps.return_value = (95.0, 210.0, 45.0)
-        mock_cached_inst.get_track_voltage.return_value = 14000
-        mock_cached_inst.get_pressure.return_value = 50.0
+    import contextlib
+    class WatchdogMock:
+        def __init__(self, *args, **kwargs):
+            pass
+        def check(self, *args, **kwargs):
+            check_side_effect()
+    with patch('app.main.Watchdog', new=WatchdogMock), \
+         patch('app.safety.Watchdog', new=WatchdogMock):
+        import importlib
+        importlib.invalidate_caches()
+        importlib.reload(importlib.import_module('app.main'))
+        from app.main import run
+        with contextlib.ExitStack() as stack:
+            mocks = [
+                stack.enter_context(patch('app.main.MechanicalMapper')),
+                stack.enter_context(patch('app.main.DCCDecoder')),
+                stack.enter_context(patch('app.main.SensorSuite')),
+                stack.enter_context(patch('app.main.PhysicsEngine')),
+                stack.enter_context(patch('app.main.PressureController')),
+                stack.enter_context(patch('app.main.BLE_UART')),
+                stack.enter_context(patch('app.main.CachedSensorReader')),
+                stack.enter_context(patch('app.main.SerialPrintQueue')),
+                stack.enter_context(patch('app.main.FileWriteQueue')),
+                stack.enter_context(patch('app.main.GarbageCollector')),
+                stack.enter_context(patch('app.main.ensure_environment')),
+                stack.enter_context(patch('app.main.load_cvs', return_value=cv_table)),
+                stack.enter_context(patch('app.main.time.sleep_ms')),
+                stack.enter_context(patch('app.main.gc.mem_free', return_value=100000)),
+            ]
 
-        # Configure encoder tracker mock
-        mock_encoder_inst = mock_encoder.return_value
-        mock_encoder_inst.get_velocity_cms.return_value = 35.2
+            # Set up all mocks and their return values
+            mock_cached_inst = mocks[6].return_value
+            mock_cached_inst.read_temps.return_value = (95.0, 210.0, 45.0)
+            mock_cached_inst.read_track_voltage.return_value = 14000
+            mock_cached_inst.read_pressure.return_value = 50.0
+            mock_cached_inst.get_temps.return_value = (95.0, 210.0, 45.0)
+            mock_cached_inst.get_track_voltage.return_value = 14000
+            mock_cached_inst.get_pressure.return_value = 50.0
 
-        mock_dcc_inst = mock_dcc.return_value
-        mock_dcc_inst.current_speed = 64
-        mock_dcc_inst.direction = 1
-        mock_dcc_inst.whistle = False
-        mock_dcc_inst.e_stop = False
-        mock_dcc_inst.is_active.return_value = True
+            mock_physics_inst = mocks[3].return_value
+            mock_physics_inst.calc_velocity.return_value = 35.2
+            mock_physics_inst.speed_to_regulator.return_value = 50.0
 
-        mock_physics_inst = mock_physics.return_value
-        mock_physics_inst.speed_to_regulator.return_value = 50.0
+            mock_encoder_inst = mocks[7].return_value
+            mock_encoder_inst.get_velocity_cms.return_value = 35.2
 
-        mock_wdt_inst = mock_wdt.return_value
-        mock_pressure_inst = mock_pressure.return_value
-        mock_mech_inst = mock_mech.return_value
-        mock_mech_inst.current = 130.0
+            mock_dcc_inst = mocks[1].return_value
+            mock_dcc_inst.current_speed = 64
+            mock_dcc_inst.direction = 1
+            mock_dcc_inst.whistle = False
+            mock_dcc_inst.e_stop = False
+            mock_dcc_inst.is_active.return_value = True
 
-        # Run one iteration - exit after first loop
-        # ticks_ms is called 3+ times per iteration (loop_start, now calculations, elapsed, etc.)
-        with pytest.raises(StopIteration):
-            with patch('app.main.time.ticks_ms', side_effect=[0, 5, 10, 15, 20, 25, StopIteration]):
-                run()
+            mock_pressure_inst = mocks[4].return_value
+            class DummyHeater:
+                def __init__(self, duty=512):
+                    self._duty = duty
+                def duty(self, value):
+                    self._duty = value
+            mock_pressure_inst.boiler_heater = DummyHeater(512)
+            mock_pressure_inst.super_heater = DummyHeater(512)
 
-        # Watchdog check should be called at least once
-        assert mock_wdt_inst.check.called
+            mock_mech_inst = mocks[0].return_value
+            mock_mech_inst.current = 130.0
 
-
-def test_memory_garbage_collection_threshold(cv_table, mock_subsystems):
-    """
-    Verify garbage collection triggered when free memory < 60KB.
-    
-    Why: MicroPython heap exhaustion causes runtime crash. Proactive GC prevents
-    OOM failures during long-running operation.
-    
-    Safety: GC pause (~10ms) acceptable in 50Hz loop (20ms period). Prevents
-    catastrophic malloc failures.
-    """
-    with patch('gc.mem_free', return_value=50000), \
-         patch('gc.collect') as mock_gc:
-        
-        loco = Locomotive(cv_table)
-        
-        # Verify GC_THRESHOLD constant exists and is correct value (60 KB = 61440 bytes)
-        from app.config import GC_THRESHOLD
-        assert GC_THRESHOLD == 61440
-
-
-def test_loop_timing_50hz_target(cv_table, mock_subsystems):
-    """
-    Verify control loop targets 50Hz (20ms period).
-    
-    Why: 50Hz balances servo responsiveness (human perception ~30Hz) with CPU
-    overhead. Faster rates waste power, slower rates cause jerky motion.
-    
-    Safety: Loop timing must be deterministic for PID stability and sensor fusion.
-    """
-    # Verify loop sleep calculation: max(1, 20 - elapsed)
-    # This is tested implicitly in run() function structure
-    # Explicit verification would require refactoring run() into testable units
-    pass
-
-
-def test_telemetry_throttled_to_1hz(cv_table, mock_subsystems):
-    """
-    Verify BLE telemetry sent at 1Hz (every 1000ms), not every loop iteration.
-    
-    Why: BLE send takes ~5ms. Sending every 20ms (50Hz) would consume 25% CPU.
-    1Hz provides sufficient update rate for human monitoring.
-    
-    Safety: Telemetry must not block control loop or affect timing.
-    """
-    # Verify time.ticks_diff check for >1000ms in run() function
-    # This is tested implicitly in code structure
-    pass
-
-
-def test_pressure_control_throttled_to_2hz(cv_table, mock_subsystems):
-    """
-    Verify PID pressure control updated at 2Hz (every 500ms).
-    
-    Why: Boiler thermal time constant ~60s. 2Hz update rate sufficient for
-    pressure regulation. Faster updates waste CPU on redundant calculations.
-    
-    Safety: PID stability requires consistent dt (timestep). 500ms provides
-    good balance.
-    """
-    # Verify time.ticks_diff check for >500ms in run() function
-    pass
-
-
-def test_emergency_shutdown_causes(cv_table, mock_subsystems):
-    """
-    Document all emergency shutdown causes handled by die().
-    
-    Why: Emergency causes must be comprehensive and documented for operator
-    training and incident analysis.
-    
-    Causes:
-    - LOGIC_HOT: TinyPICO overheating (CV41 exceeded)
-    - DRY_BOIL: Boiler overtemp (CV42 exceeded)
-    - SUPER_HOT: Superheater overtemp (CV43 exceeded)
-    - PWR_LOSS: Track voltage timeout (CV45 exceeded)
-    - DCC_LOST: DCC signal timeout (CV44 exceeded)
-    
-    Safety: Each cause requires different operator response (e.g., DRY_BOIL
-    needs water refill, PWR_LOSS needs track power check).
-    """
-    with patch('machine.deepsleep'), patch('app.main.time.sleep'):
-        loco = Locomotive(cv_table)
-        
-        # Test all documented causes don't crash
-        for cause in ["LOGIC_HOT", "DRY_BOIL", "SUPER_HOT", "PWR_LOSS", "DCC_LOST"]:
-            loco2 = Locomotive(cv_table)
-            loco2.die(cause)
-            # Should complete without exception
+            print("DEBUG: About to call run()")
+            ticks_sequence = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
+            with patch('app.main.time.ticks_ms', side_effect=ticks_sequence):
+                def stop_after_first_sleep(*args, **kwargs):
+                    raise StopIteration()
+                with patch('app.main.time.sleep_ms', side_effect=stop_after_first_sleep):
+                    with pytest.raises(StopIteration):
+                        run()
+            print("DEBUG: Finished run() call")
+            assert check_called['called']

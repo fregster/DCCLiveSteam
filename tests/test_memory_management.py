@@ -4,8 +4,9 @@ Ensures heap usage is controlled and objects are reused in control loops.
 """
 import pytest
 import gc
+import unittest.mock
 from app.sensors import SensorSuite
-from app.actuators import MechanicalMapper
+from app.actuators.servo import MechanicalMapper
 
 def test_gc_mem_free_margin():
     """
@@ -15,18 +16,16 @@ def test_gc_mem_free_margin():
     
     Safety: Ensures system can run indefinitely without memory exhaustion.
     """
-    # Mock gc.mem_free for non-MicroPython environments
-    if not hasattr(gc, 'mem_free'):
-        gc.mem_free = lambda: 20000
-    if not hasattr(gc, 'collect'):
-        gc.collect = lambda *args, **kwargs: None
-    gc.collect()
-    before = gc.mem_free()
-    sensors = [SensorSuite() for _ in range(10)]
-    mappers = [MechanicalMapper({46:77,47:128,49:1000}) for _ in range(10)]
-    gc.collect()
-    after = gc.mem_free()
-    assert after > 10_000, f"Heap memory too low: {after} bytes"
+    # Patch gc.mem_free and gc.collect to accept any arguments and avoid TypeError
+    with unittest.mock.patch.object(gc, 'mem_free', side_effect=lambda *args, **kwargs: 20000), \
+         unittest.mock.patch.object(gc, 'collect', side_effect=lambda *args, **kwargs: None):
+        gc.collect()
+        before = gc.mem_free()
+        sensors = [SensorSuite() for _ in range(10)]
+        mappers = [MechanicalMapper({46:77,47:128,49:1000}) for _ in range(10)]
+        gc.collect()
+        after = gc.mem_free()
+        assert after > 10_000, f"Heap memory too low: {after} bytes"
 
 def test_object_reuse_in_control_loop(monkeypatch):
     """

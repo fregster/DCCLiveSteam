@@ -1,3 +1,5 @@
+# Minimum allowed margin between target and max boiler pressure (kPa, not user-configurable)
+PRESSURE_MARGIN_KPA = 15.0
 """
 Configuration management for ESP32 live steam locomotive control system.
 Handles CV storage, defaults, and hardware pin mappings.
@@ -43,7 +45,8 @@ CV_DEFAULTS = {
     "29": 6,         # Configuration flags
     "30": 1,         # Distress whistle enable
     "31": 0,         # Servo Offset
-    "32": 18.0,      # Target Pressure (PSI)
+    "32": 124.0,     # Target Pressure (kPa, default 124 kPa; 18.0 PSI reference)
+        "35": 207.0,     # Max Boiler Pressure (kPa, user limit, default 207 kPa; 30 PSI reference)
     "33": 35.0,      # Stiction Breakout (%)
     "34": 15.0,      # Slip Sensitivity (%)
     "37": 1325,      # Wheel radius (mm * 100)
@@ -62,6 +65,7 @@ CV_DEFAULTS = {
     "84": 1,         # Enable Graceful Degradation (1=ON, 0=immediate shutdown)
     "87": 10.0,      # Sensor Failure Decel Rate (cm/s²)
     "88": 20,        # Degraded Mode Timeout (seconds)
+    "51": 4.5,       # Power Budget (Amps)
 }
 
 def ensure_environment() -> None:
@@ -169,7 +173,8 @@ CV_BOUNDS = {
     29: (0, 255, "flags", "Configuration flags"),
     30: (0, 1, "bool", "Distress whistle enable"),
     31: (-50, 50, "pwm", "Servo offset"),
-    32: (15.0, 25.0, "PSI", "Target pressure"),
+    32: (70.0, 207.0, "kPa", "Target pressure (user, kPa; default 124 kPa; 18.0 PSI reference)",),
+    35: (100.0, 220.0, "kPa", "Max boiler pressure (user, kPa; default 207 kPa; 30 PSI reference, Hornby safety valve)"),
     33: (10.0, 50.0, "%", "Stiction breakout"),
     34: (5.0, 30.0, "%", "Slip sensitivity"),
     37: (1000, 2000, "mm*100", "Wheel radius"),
@@ -239,10 +244,10 @@ def validate_and_update_cv(cv_num: int, new_value: str, cv_table: Dict[int, any]
 
     try:
         # Parse value (try float first, fall back to int)
-        if '.' in new_value:
-            parsed_value = float(new_value)
-        else:
-            parsed_value = int(new_value)
+        parsed_value = float(new_value)
+        # If the value is an integer string, store as int
+        if parsed_value.is_integer():
+            parsed_value = int(parsed_value)
     except (ValueError, AttributeError):
         return (False, f"CV{cv_num} invalid value '{new_value}' (not a number)")
 
