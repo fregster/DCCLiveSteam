@@ -223,12 +223,12 @@ System Ready. Address: 3
 ```
 
 ### 5.4 Monitor Telemetry Output
-Every 50 seconds, you should see status updates:
+Every 50 seconds, you should see status updates (pressure shown as PSI by firmware; kPa equivalent shown in brackets below):
 ```
-SPD:0.0 PSI:0.0 T:25/25/25 SRV:77
+SPD:0.0 PSI:0.0 T:25/25/25 SRV:77  (0.0 kPa)
 ```
 
-Format: `SPD:<velocity_cms> PSI:<pressure> T:<boiler>/<super>/<logic> SRV:<servo_pwm>`
+Format: `SPD:<velocity_cms> PSI:<pressure_psi> T:<boiler>/<super>/<logic> SRV:<servo_pwm>`
 
 ---
 
@@ -315,14 +315,14 @@ Thermistors are pre-calibrated using Steinhart-Hart equation. If readings are in
 3. Connect to Nordic UART Service (UUID: 6E400001-B5A3-F393-E0A9-E50E24DCCA9E)
 
 ### 8.2 Telemetry Format
-Every 1 second, you'll receive:
+Every 1 second, you'll receive (pressure shown as PSI by firmware; kPa equivalent shown in brackets below):
 ```
-V:12.5 P:35.2 B:95.0 S:210.0 L:45.0 SRV:102
+V:12.5 P:35.2 B:95.0 S:210.0 L:45.0 SRV:102  (243 kPa)
 ```
 
 Format:
 - `V`: Velocity (cm/s)
-- `P`: Pressure (PSI)
+- `P`: Pressure (kPa; firmware output is PSI)
 - `B`: Boiler temperature (°C)
 - `S`: Superheater temperature (°C)
 - `L`: Logic bay temperature (°C)
@@ -416,13 +416,13 @@ After emergency shutdown:
 
 - [ ] Servo moves smoothly from neutral to max position
 - [ ] Temperature readings show ambient (~25°C) when cold
-- [ ] Pressure reading shows 0 PSI when boiler cold
+- [ ] Pressure reading shows 0 kPa (0 PSI) when boiler cold
 - [ ] DCC address matches command station setting
 - [ ] BLE telemetry connects and updates every 1 second
 - [ ] Watchdog triggers on simulated thermal fault (test with hot air gun)
 - [ ] E-STOP command (F12) closes regulator instantly
 - [ ] Distress whistle sounds during emergency shutdown (if enabled via CV30)
-- [ ] Serial console shows "SPD:X PSI:Y T:Z" updates every 50 seconds
+- [ ] Serial console shows "SPD:X PSI:Y T:Z" updates every 50 seconds (kPa equivalent in brackets)
 - [ ] System survives power cycle without corruption
 
 ---

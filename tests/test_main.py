@@ -154,25 +154,27 @@ def test_die_shuts_down_heaters_immediately(cv_table, mock_subsystems):
 def test_die_saves_black_box_to_flash(cv_table, mock_subsystems):
     """
     Verify die() saves event buffer to error_log.json.
-    
+
     Why: Black-box data enables post-incident root cause analysis. Flash storage
     persists across power cycles.
-    
-    Safety: Flash write failures must not prevent shutdown (try-except wrapper).
+
+    Safety: Flash write queued non-blocking, failures don't prevent shutdown.
     """
     m_open = mock_open(read_data='[]')
     with patch('builtins.open', m_open), \
          patch('machine.deepsleep'), \
          patch('app.main.time.sleep'), \
-         patch('json.load', return_value=[]), \
-         patch('json.dump') as mock_dump:
-        
+         patch('json.load', return_value=[]):
+
         loco = Locomotive(cv_table)
         loco.log_event("EVENT1", "data1")
         loco.die("DRY_BOIL")
-        
-        # Verify json.dump called
-        assert mock_dump.called
+
+        # Verify log write was queued (non-blocking)
+        assert len(loco.file_queue._queue) > 0
+        filepath, content, priority = loco.file_queue._queue[0]
+        assert filepath == "error_log.json"
+        assert priority is True  # Emergency logs are high priority
 
 
 def test_die_enables_emergency_mode(cv_table, mock_subsystems):
@@ -378,40 +380,47 @@ def test_control_loop_watchdog_check_called(cv_table, mock_subsystems):
          patch('app.main.PhysicsEngine') as mock_physics, \
          patch('app.main.PressureController') as mock_pressure, \
          patch('app.main.BLE_UART') as mock_ble, \
+         patch('app.main.CachedSensorReader') as mock_cached_sensors, \
+         patch('app.main.EncoderTracker') as mock_encoder, \
+         patch('app.main.SerialPrintQueue') as mock_serial_q, \
+         patch('app.main.FileWriteQueue') as mock_file_q, \
+         patch('app.main.GarbageCollector') as mock_gc_mgr, \
          patch('app.main.ensure_environment'), \
          patch('app.main.load_cvs', return_value=cv_table), \
          patch('app.main.time.sleep_ms'), \
          patch('app.main.gc.mem_free', return_value=100000):
-        
-        # Configure mock instances
-        mock_sensors_inst = mock_sensors.return_value
-        mock_sensors_inst.read_temps.return_value = (95.0, 210.0, 45.0)
-        mock_sensors_inst.read_track_voltage.return_value = 14000
-        mock_sensors_inst.read_pressure.return_value = 50.0
-        mock_sensors_inst.update_encoder.return_value = 100
-        
+
+        # Configure cached sensor mock
+        mock_cached_inst = mock_cached_sensors.return_value
+        mock_cached_inst.get_temps.return_value = (95.0, 210.0, 45.0)
+        mock_cached_inst.get_track_voltage.return_value = 14000
+        mock_cached_inst.get_pressure.return_value = 50.0
+
+        # Configure encoder tracker mock
+        mock_encoder_inst = mock_encoder.return_value
+        mock_encoder_inst.get_velocity_cms.return_value = 35.2
+
         mock_dcc_inst = mock_dcc.return_value
         mock_dcc_inst.current_speed = 64
         mock_dcc_inst.direction = 1
         mock_dcc_inst.whistle = False
         mock_dcc_inst.e_stop = False
         mock_dcc_inst.is_active.return_value = True
-        
+
         mock_physics_inst = mock_physics.return_value
         mock_physics_inst.speed_to_regulator.return_value = 50.0
-        mock_physics_inst.calc_velocity.return_value = 35.2
-        
+
         mock_wdt_inst = mock_wdt.return_value
         mock_pressure_inst = mock_pressure.return_value
         mock_mech_inst = mock_mech.return_value
         mock_mech_inst.current = 130.0
-        
+
         # Run one iteration - exit after first loop
         # ticks_ms is called 3+ times per iteration (loop_start, now calculations, elapsed, etc.)
         with pytest.raises(StopIteration):
             with patch('app.main.time.ticks_ms', side_effect=[0, 5, 10, 15, 20, 25, StopIteration]):
                 run()
-        
+
         # Watchdog check should be called at least once
         assert mock_wdt_inst.check.called
 

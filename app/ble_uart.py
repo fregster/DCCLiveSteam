@@ -54,6 +54,12 @@ class BLE_UART:
         self._telemetry_buffer: Optional[bytes] = None  # Queued telemetry packet
         self._telemetry_pending = False  # True if packet queued but not yet sent
 
+        # RX buffer for receiving commands (NEW: BLE CV updates)
+        self.rx_queue: list[str] = []  # Parsed commands ready for processing
+        self._rx_buffer = bytearray()  # Accumulation buffer for partial commands
+        self._max_rx_buffer = 128  # Maximum buffer size (safety limit)
+        self._max_rx_queue = 16  # Maximum queued commands (safety limit)
+
         # Standard Nordic UART Service (NUS) UUIDs
         self._uart_uuid = bluetooth.UUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
         TX_UUID = bluetooth.UUID("6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
@@ -181,17 +187,19 @@ class BLE_UART:
         return self._connected
 
     def _irq(self, event: int, data: Tuple) -> None:
-        """Handle BLE connection events (connect/disconnect).
+        """Handle BLE connection events (connect/disconnect) and RX data.
 
-        Why: BLE stack calls this IRQ handler on connection state changes. Event codes:
-        1 = _IRQ_CENTRAL_CONNECT (client connected), 2 = _IRQ_CENTRAL_DISCONNECT (lost).
+        Why: BLE stack calls this IRQ handler on connection state changes and data RX.
+        Event codes: 1=connect, 2=disconnect, 3=RX data available. Commands arrive
+        as ASCII strings terminated with newline, possibly split across multiple events.
 
         Args:
-            event: BLE event code (1=connect, 2=disconnect)
+            event: BLE event code (1=connect, 2=disconnect, 3=RX gatts_write)
             data: Event-specific data tuple (unused for connection events)
 
         Safety: Restart advertising on disconnect enables automatic reconnection.
         Connection state tracked in _connected flag for is_connected() queries.
+        RX buffer limited to 128 bytes to prevent memory exhaustion.
 
         Example:
             >>> # Called automatically by BLE stack
@@ -204,3 +212,50 @@ class BLE_UART:
         elif event == 2:  # _IRQ_CENTRAL_DISCONNECT
             self._connected = False
             self._advertise()  # Restart advertising
+        elif event == 3:  # _IRQ_GATTS_WRITE (RX data received)
+            self._on_rx()
+
+    def _on_rx(self) -> None:
+        """Process incoming BLE RX data and extract complete commands.
+
+        Why: Commands arrive as ASCII strings with \n terminator. Single RX events
+        may contain partial commands, so data is accumulated in buffer until newline
+        is found. Complete commands are extracted and queued for main loop processing.
+
+        Safety: Buffer limited to 128 bytes max. If exceeded, oldest data is discarded
+        to prevent memory exhaustion. Queue limited to 16 commands to prevent overflow.
+
+        Example:
+            >>> # Receives "CV32=20.0\n"
+            >>> ble._on_rx()  # Extracts command, adds to rx_queue
+            >>> ble.rx_queue
+            ['CV32=20.0']
+        """
+        try:
+            # Read all available data from RX characteristic
+            data = self._ble.gatts_read(self._handle_rx)
+            if not data:
+                return
+
+            # Append to buffer, enforce max size
+            self._rx_buffer.extend(data)
+            if len(self._rx_buffer) > self._max_rx_buffer:
+                # Discard oldest data to stay under limit
+                self._rx_buffer = self._rx_buffer[-self._max_rx_buffer:]
+
+            # Extract complete commands (terminated by \n)
+            while b'\n' in self._rx_buffer:
+                newline_index = self._rx_buffer.index(b'\n')
+                command_bytes = self._rx_buffer[:newline_index]
+                self._rx_buffer = self._rx_buffer[newline_index + 1:]  # Remove processed
+
+                # Decode and queue command
+                try:
+                    command_str = command_bytes.decode('utf-8').strip()
+                    if command_str and len(self.rx_queue) < self._max_rx_queue:
+                        self.rx_queue.append(command_str)
+                except (UnicodeDecodeError, AttributeError):
+                    pass  # Invalid UTF-8, discard
+
+        except Exception:
+            pass  # Silently ignore RX errors (don't crash main loop)

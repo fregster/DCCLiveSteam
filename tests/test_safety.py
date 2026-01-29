@@ -16,7 +16,7 @@ def watchdog():
 
 @pytest.fixture
 def mock_loco():
-    """Creates a mock Mallard instance."""
+    """Creates a mock Locomotive instance."""
     loco = Mock()
     loco.die = Mock()
     return loco

@@ -52,7 +52,7 @@ Result: Operator has time to react, no derailment, train stopped safely
 - Boiler thermistor fails (loose wire)
 - System reads 999.9°C
 - Emergency shutdown triggered: regulator closes instantly
-- Train moving at 100 cm/s (3.3 mph) suddenly stops
+- Train moving at 100 cm/s (1.0 m/s, 3.6 km/h, 3.3 mph) suddenly stops
 - Heavy loaded consist (4-5 cars) experiences sudden 1-2G deceleration
 - Cargo shifts, train derails, expensive damage
 
@@ -139,7 +139,7 @@ Result: Operator has time to react, no derailment, train stopped safely
 
 **What happens:**
 1. System detects invalid pressure reading
-2. Uses cached last-valid reading (10 PSI) instead of dropping pressure
+2. Uses cached last-valid reading (69 kPa [10 PSI]) instead of dropping pressure
 3. Sensor noise clears after 50ms
 4. System confirms valid reading returns
 5. No distress signal, train continues normally

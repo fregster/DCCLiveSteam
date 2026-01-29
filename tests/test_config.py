@@ -264,5 +264,180 @@ def test_cv_defaults_values_are_valid():
     assert CV_DEFAULTS["46"] < CV_DEFAULTS["47"], "Servo neutral should be less than max"
 
 
+# ===== NEW TESTS: CV Validation and Update =====
+
+
+def test_validate_cv_valid_update(temp_config_dir):
+    """
+    Tests successful CV validation and update.
+    
+    Why: Valid CV values within safe bounds should be accepted and applied.
+    
+    Example: CV32 (pressure) = 20.0 PSI (within 15.0-25.0 range)
+    """
+    from app.config import validate_and_update_cv
+    
+    cv_table = {32: 18.0}  # Current value
+    success, message = validate_and_update_cv(32, "20.0", cv_table)
+    
+    assert success is True
+    assert "Updated CV32" in message
+    assert cv_table[32] == 20.0
+
+
+def test_validate_cv_out_of_range(temp_config_dir):
+    """
+    Tests CV validation rejects out-of-range values.
+    
+    Why: Out-of-range values (e.g., boiler temp > 120°C) could cause thermal
+    runaway or equipment damage.
+    
+    Safety: Validation bounds prevent operator errors.
+    """
+    from app.config import validate_and_update_cv
+    
+    cv_table = {32: 18.0}
+    success, message = validate_and_update_cv(32, "30.0", cv_table)  # Above 25.0 max
+    
+    assert success is False
+    assert "out of range" in message
+    assert cv_table[32] == 18.0  # Value unchanged
+
+
+def test_validate_cv_unknown_cv_number(temp_config_dir):
+    """
+    Tests CV validation rejects unknown CV numbers.
+    
+    Why: Unknown CV numbers have no validation bounds and should be rejected
+    to prevent accidental misconfiguration.
+    """
+    from app.config import validate_and_update_cv
+    
+    cv_table = {}
+    success, message = validate_and_update_cv(99, "123", cv_table)
+    
+    assert success is False
+    assert "unknown" in message
+
+
+def test_validate_cv_non_numeric_value(temp_config_dir):
+    """
+    Tests CV validation rejects non-numeric values.
+    
+    Why: CVs are numeric parameters. Non-numeric input (e.g., "abc") should
+    be rejected with clear error message.
+    """
+    from app.config import validate_and_update_cv
+    
+    cv_table = {32: 18.0}
+    success, message = validate_and_update_cv(32, "not_a_number", cv_table)
+    
+    assert success is False
+    assert "not a number" in message
+    assert cv_table[32] == 18.0  # Value unchanged
+
+
+def test_validate_cv_integer_parsing(temp_config_dir):
+    """
+    Tests CV validation correctly parses integer values.
+    
+    Why: Integer CVs (e.g., CV49=1200ms) should parse as int, not float.
+    """
+    from app.config import validate_and_update_cv
+    
+    cv_table = {49: 1000}
+    success, message = validate_and_update_cv(49, "1200", cv_table)
+    
+    assert success is True
+    assert cv_table[49] == 1200
+    assert isinstance(cv_table[49], int)
+
+
+def test_validate_cv_float_parsing(temp_config_dir):
+    """
+    Tests CV validation correctly parses float values.
+    
+    Why: Float CVs (e.g., CV32=20.5 PSI) should parse as float.
+    """
+    from app.config import validate_and_update_cv
+    
+    cv_table = {32: 18.0}
+    success, message = validate_and_update_cv(32, "20.5", cv_table)
+    
+    assert success is True
+    assert cv_table[32] == 20.5
+    assert isinstance(cv_table[32], float)
+
+
+def test_validate_cv_boundary_values(temp_config_dir):
+    """
+    Tests CV validation accepts exact min/max boundary values.
+    
+    Why: Boundary values (e.g., CV32=15.0 or 25.0 PSI) should be accepted
+    as valid (inclusive bounds).
+    """
+    from app.config import validate_and_update_cv
+    
+    cv_table = {32: 18.0}
+    
+    # Test minimum boundary
+    success_min, msg_min = validate_and_update_cv(32, "15.0", cv_table)
+    assert success_min is True
+    assert cv_table[32] == 15.0
+    
+    # Test maximum boundary
+    success_max, msg_max = validate_and_update_cv(32, "25.0", cv_table)
+    assert success_max is True
+    assert cv_table[32] == 25.0
+
+
+def test_validate_cv_preserves_old_value_on_error(temp_config_dir):
+    """
+    Tests CV validation preserves old value when update fails.
+    
+    Why: Atomic update behavior - failed validation should not corrupt CV table.
+    
+    Safety: Critical for maintaining system integrity after failed updates.
+    """
+    from app.config import validate_and_update_cv
+    
+    cv_table = {32: 18.0, 49: 1000}
+    
+    # Attempt invalid update
+    validate_and_update_cv(32, "999.0", cv_table)  # Out of range
+    
+    # Verify original values preserved
+    assert cv_table[32] == 18.0
+    assert cv_table[49] == 1000
+
+
+def test_validate_cv_thermal_limits(temp_config_dir):
+    """
+    Tests validation of thermal limit CVs (safety-critical).
+    
+    Why: Thermal limits (CV41, CV42, CV43) prevent overheating and equipment
+    damage. Validation must enforce conservative bounds.
+    
+    Safety: Critical for preventing thermal runaway and fire hazards.
+    """
+    from app.config import validate_and_update_cv
+    
+    cv_table = {41: 75, 42: 110, 43: 250}
+    
+    # Valid updates
+    success, _ = validate_and_update_cv(41, "70", cv_table)
+    assert success is True
+    
+    success, _ = validate_and_update_cv(42, "115", cv_table)
+    assert success is True
+    
+    # Invalid: Too high (dangerous)
+    success, msg = validate_and_update_cv(41, "95", cv_table)
+    assert success is False  # Above 85°C max
+    
+    success, msg = validate_and_update_cv(42, "130", cv_table)
+    assert success is False  # Above 120°C max
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v', '-W', 'error'])

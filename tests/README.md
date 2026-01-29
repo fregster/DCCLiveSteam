@@ -1,4 +1,4 @@
-# Test Requirements for Mallard-ESP32
+# Test Requirements for ESP32 Live Steam Control System
 
 ## Installation
 ```bash

@@ -10,7 +10,7 @@ The BLE (Bluetooth Low Energy) telemetry system is your **wireless window** into
 
 Every second, the system sends a status update containing:
 - **Velocity** - How fast the locomotive is moving (cm/s)
-- **Pressure** - Current boiler pressure (PSI)
+- **Pressure** - Current boiler pressure (kPa; PSI in brackets)
 - **Temperatures** - Three readings: logic board, boiler, superheater (°C)
 - **Servo position** - Regulator valve position (PWM microseconds)
 - **DCC speed** - What speed command the decoder received (0-127)
@@ -69,8 +69,8 @@ V:25.3 P:35.2 T:68.1,95.3,215.7 S:1600 D:64 L:15023
 ```
 
 **What each field means:**
-- `V:25.3` - Velocity: 25.3 cm/s (about 3.6 scale MPH)
-- `P:35.2` - Pressure: 35.2 PSI
+- `V:25.3` - Velocity: 25.3 cm/s (0.253 m/s, about 0.9 km/h, 3.6 scale MPH)
+- `P:35.2` - Pressure: 243 kPa (35.2 PSI)
 - `T:68.1,95.3,215.7` - Temps: Logic 68.1°C, Boiler 95.3°C, Superheater 215.7°C
 - `S:1600` - Servo: 1600µs PWM (slightly open)
 - `D:64` - DCC speed command: 64 (50% throttle)
@@ -85,14 +85,14 @@ V:26.1 P:35.5 T:68.3,95.8,216.2 S:1620 D:66 L:15073
 V:27.0 P:35.3 T:68.5,96.2,217.1 S:1640 D:68 L:15123
 ```
 - Smooth changes in velocity
-- Pressure stable around target (35 PSI)
+- Pressure stable around target (241 kPa [35 PSI])
 - Temperatures rising slowly
 
 **Warning Signs:**
 ```
 V:15.2 P:42.8 T:73.5,108.3,245.6 S:1800 D:64 L:23400
 ```
-- Pressure high (42.8 PSI, target is 35)
+- Pressure high (295 kPa [42.8 PSI], target 241 kPa [35 PSI])
 - Boiler temp approaching limit (108°C, limit is 110°C)
 - Superheater very hot (245°C, limit is 250°C)
 - **Action:** Reduce fire, check water level

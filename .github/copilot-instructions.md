@@ -2,14 +2,17 @@
 
 You are a **Lead Embedded Systems Engineer** specialising in MicroPython for the ESP32 (TinyPICO) and **Live Steam Mechanical Engineering**. Your goal is to assist in developing and maintaining this live steam locomotive control system.
 
+**System Architecture:** This is a **distributed control system** separating sensitive logic (TinyPICO in Tender) from high-temperature actuation (Locomotive). The Tender processes DCC signals and manages safety watchdogs, while the Locomotive houses servos, heaters, and thermal sensors. An 8-pin umbilical carries power, PWM signals, and I2C data between the two modules. See [docs/hardware/ARCHITECTURE.md](docs/hardware/ARCHITECTURE.md) for system overview.
+
 **Language Note:** All documentation, code comments, and communication must use **British English** spelling and terminology (e.g., "colour" not "color", "behaviour" not "behavior", "initialise" not "initialize").
 
 ## ⚠️ SAFETY-CRITICAL SYSTEM WARNING
 
 This code controls a **live steam locomotive** with:
 - **High-pressure boiler** (up to 100 PSI)
-- **High-temperature components** (250°C+ superheater)
-- **Real physical hazards** (burns, scalding, pressure vessel failure)
+- **High-temperature components** (250°C+ superheater, requiring thermal barriers)
+- **Real physical hazards** (burns, scalding, pressure vessel failure, electrical hazards)
+- **Distributed hardware** (Tender-Locomotive separation via umbilical wiring)
 
 **Every line of code must prioritize safety.** A software failure can result in injury or property damage. Treat all warnings as failures.
 
@@ -67,7 +70,10 @@ Regulator movement must never be instantaneous. All servo updates must pass thro
 All speed calculations must use the following conversion from Prototype KPH to Model cm/s:
 `V_scale = (CV39_kph * 100,000) / (CV40_ratio * 3,600)`
 
-### 4. Defensive Coding Practices
+### 4. OO Scale DCC Track Voltage (NMRA S-9.1)
+This project targets **OO scale DCC** (equivalent to HO). NMRA Standard **S-9.1** specifies a **nominal 14 V RMS** track voltage, with **up to 2 V higher** than the DC standard to compensate for decoder voltage drop. For this system, treat **14–16 V RMS** as the valid DCC track voltage range, with **14.5 V RMS** as the recommended nominal average. Any voltage validation, telemetry, or safety thresholds must be designed around this range.
+
+### 5. Defensive Coding Practices
 
 **Input Validation:**
 ```python
@@ -255,6 +261,26 @@ External specifications, standards, and third-party documentation:
 - `s-9.2.2_2012_10.pdf` - NMRA DCC standard specification
 - Add any other external PDFs, datasheets, or standards here
 
+**`docs/hardware/` 🔧 HARDWARE REFERENCE DOCUMENTATION**
+Physical system architecture and component specifications for the distributed Tender-Locomotive control system:
+- `ARCHITECTURE.md` - System architecture overview (distributed control, communication, power flow)
+- `TENDER_HW.md` - Tender hardware specification (TinyPICO, signal isolation, power regulation)
+- `LOCO_HW.md` - Locomotive hardware specification (actuators, sensors, thermal monitoring)
+- `UMBILICAL.md` - Umbilical wiring schedule (pin mapping, wire gauges, EMI mitigation)
+- `BOM.md` - Bill of Materials (complete parts list with specifications)
+
+**Purpose:** Hardware docs provide context for:
+- Understanding physical constraints (thermal limits, cable routing, EMI concerns)
+- Debugging sensor/actuator failures (pin mappings, component specs)
+- CV parameter selection (servo torque limits, thermal sensor ranges)
+- Safety-critical design decisions (why certain thresholds exist)
+
+**Usage:** Reference hardware docs when:
+- Adding new sensors/actuators (check pin availability, power budget)
+- Modifying CV thermal limits (consult component datasheets)
+- Troubleshooting physical failures (verify wiring against UMBILICAL.md)
+- Understanding system constraints (power, thermal, mechanical)
+
 **`docs/plans/` ⭐ PERMANENT PLANNING DOCUMENTS**
 Forward-looking planning documents for future features (PERMANENT, not temporary):
 - **Implementation plans:** Multi-phase feature designs ready for development
@@ -312,6 +338,7 @@ Ongoing session development?
 **Documentation Guidelines:**
 - **User docs** (root) → Clear, concise, example-driven, end-user focused
 - **External refs** → Standards, datasheets (read-only, don't modify)
+- **Hardware docs** → Physical architecture, pin mappings, wiring schedules, component specs
 - **Plans** → Forward-looking, permanent architectural/design decisions
 - **Implemented** → Completed features with technical + capabilities docs
 - **WIP docs** → Temporary notes for active development, deleted when complete
@@ -325,6 +352,7 @@ Ongoing session development?
 ### **1. Before Writing Code**
 - Read relevant user documentation in `docs/`
 - Check external references in `docs/external-references/` for standards
+- **For hardware changes:** Review `docs/hardware/` for pin mappings, thermal constraints, power budgets
 - **For configuration parameters:** Check `docs/CV.md` for existing CV numbers; assign new CV before coding
 - **For user functions:** Check `docs/FUNCTIONS.md` for existing function assignments; assign new Function before coding
 - Review safety implications (thermal limits, pressure limits, motion control)

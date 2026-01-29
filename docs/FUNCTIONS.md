@@ -114,9 +114,9 @@ Reads rectified DCC voltage (5:1 divider).
 **Returns:** Track voltage in millivolts (0-3600mV for 0-18V DCC)
 
 ##### `read_pressure() -> float`
-Reads pressure transducer (0.5-4.5V = 0-100 PSI).
+Reads pressure transducer (0.5–4.5 V = 0–690 kPa [0–100 PSI]).
 
-**Returns:** Pressure in PSI (0-100 range)  
+**Returns:** Pressure in kPa (0–690); firmware output is PSI, convert using 1 PSI = 6.895 kPa.  
 **Raises:** `ValueError` if ADC reading out of valid range
 
 ##### `update_encoder() -> int`
@@ -197,13 +197,13 @@ PID controller for boiler pressure regulation.
 Initialise PID controller with target pressure.
 
 **Args:**
-- `cv`: CV table with key 33 (target pressure PSI)
+- `cv`: CV table with key 33 (target pressure in kPa; stored as PSI in firmware)
 
 ##### `update(pressure: float, dt: float) -> None`
 Updates PID control and heater PWM duty cycles.
 
 **Args:**
-- `pressure`: Current pressure in PSI
+- `pressure`: Current pressure in kPa (firmware output is PSI)
 - `dt`: Time delta in seconds
 
 **Safety:** Anti-windup prevents integral term saturation.
@@ -287,7 +287,7 @@ Queues telemetry data for non-blocking transmission.
 
 **Args:**
 - `velocity`: Current velocity (cm/s)
-- `pressure`: Current pressure (PSI)
+- `pressure`: Current pressure (kPa; firmware output is PSI)
 - `temps`: Tuple of (boiler, super, logic) temperatures (°C)
 - `servo`: Current servo PWM duty cycle
 

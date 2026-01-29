@@ -86,7 +86,7 @@ def _calculate_whistle_position(self) -> int:
 ```
 
 **Why 5 Seconds:**
-- Allows steam pressure to drop 10-20 PSI
+- Allows steam pressure to drop 69–138 kPa (10–20 PSI)
 - Prevents pressure spike when regulator fully closes
 - Creates audible warning if locomotive unattended
 - Gives time for parallel log write (Stage 3)

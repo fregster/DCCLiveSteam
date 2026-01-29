@@ -1,5 +1,5 @@
 """
-Physics engine for Mallard locomotive.
+Physics engine for live steam locomotive.
 Handles prototype-to-scale velocity conversion and encoder-based odometry.
 """
 from typing import Dict

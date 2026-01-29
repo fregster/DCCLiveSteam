@@ -50,7 +50,7 @@ self.sensor_health = {
     "boiler_temp": "NOMINAL" | "DEGRADED",    # Valid: 0-150°C
     "super_temp": "NOMINAL" | "DEGRADED",      # Valid: 0-280°C
     "logic_temp": "NOMINAL" | "DEGRADED",      # Valid: 0-100°C
-    "pressure": "NOMINAL" | "DEGRADED",        # Valid: -1 to 30 PSI
+    "pressure": "NOMINAL" | "DEGRADED",        # Valid: -7 to 207 kPa (-1 to 30 PSI)
 }
 
 self.last_valid_reading = {
@@ -72,7 +72,7 @@ def is_reading_valid(reading: float, sensor_type: str) -> bool:
         "boiler_temp": (0, 150),      # °C: freezing to max boiler
         "super_temp": (0, 280),       # °C: freezing to steam damage
         "logic_temp": (0, 100),       # °C: freezing to TinyPICO thermal limit
-        "pressure": (-1, 30),         # PSI: vacuum to max safe pressure
+        "pressure": (-7, 207),        # kPa (PSI): vacuum to max safe pressure (-1 to 30 PSI)
     }
     low, high = ranges[sensor_type]
     return low <= reading <= high
@@ -187,7 +187,7 @@ CV_DEFAULTS = {
 - `test_is_reading_valid_boiler_temp()` - Range validation for 0-150°C
 - `test_is_reading_valid_super_temp()` - Range validation for 0-280°C
 - `test_is_reading_valid_logic_temp()` - Range validation for 0-100°C
-- `test_is_reading_valid_pressure()` - Range validation for -1 to 30 PSI
+- `test_is_reading_valid_pressure()` - Range validation for -7 to 207 kPa (-1 to 30 PSI)
 - `test_read_temps_with_valid_sensors()` - NOMINAL operation maintained
 - `test_read_temps_with_failed_boiler_sensor()` - Graceful degradation with caching
 - `test_read_temps_with_multiple_failed_sensors()` - Multiple failure detection

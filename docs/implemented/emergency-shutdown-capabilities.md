@@ -110,7 +110,7 @@ You can adjust the shutdown thresholds and behavior:
 The system includes a 1F capacitor that stores enough energy to complete the shutdown even after track power is lost. By turning off heaters **first**, it ensures the capacitor's charge is used for the servo (closing the regulator) rather than being wasted on heating elements.
 
 ### Graduated Pressure Relief
-Opening the whistle **before** closing the regulator prevents pressure spikes that could damage fittings or safety valves. The 5-second vent drops pressure by 10-20 PSI, making final closure gentle on your piping.
+Opening the whistle **before** closing the regulator prevents pressure spikes that could damage fittings or safety valves. The 5-second vent drops pressure by 69–138 kPa (10–20 PSI), making final closure gentle on your piping.
 
 ### Black Box Recording
 The diagnostic log helps you understand **why** the shutdown happened:
@@ -160,7 +160,7 @@ A: Yes - send the E-STOP command (F12). This triggers the shutdown sequence in a
 
 ⚠️ **The emergency shutdown is not a substitute for proper operation:**
 - Always monitor your locomotive when running
-- Never exceed safe boiler pressure (35 PSI default)
+- Never exceed safe boiler pressure (241 kPa [35 PSI] default)
 - Check temperature sensors before each session
 - Maintain proper water level in boiler
 

@@ -170,8 +170,8 @@ When experiencing issues:
 ### Pressure Reading is Stuck at 0.0 or 100.0
 
 **Symptoms:**
-- Pressure never changes from 0.0 PSI
-- Pressure reading maxed at 100.0 PSI
+- Pressure never changes from 0.0 kPa (0.0 PSI)
+- Pressure reading maxed at 690 kPa (100.0 PSI)
 - PID controller doesn't activate heaters
 
 **Possible Causes:**
@@ -181,16 +181,16 @@ When experiencing issues:
 
 **Solutions:**
 1. Check sensor output voltage with multimeter:
-   - At 0 PSI: should be 0.5V
-   - At 50 PSI: should be 2.5V
-   - At 100 PSI: should be 4.5V
+   - At 0 kPa (0 PSI): should be 0.5V
+   - At 345 kPa (50 PSI): should be 2.5V
+   - At 690 kPa (100 PSI): should be 4.5V
 
 2. Test ADC reading in REPL:
    ```python
    >>> from machine import ADC, Pin
    >>> from app.config import PIN_PRESSURE
    >>> adc = ADC(Pin(PIN_PRESSURE))
-   >>> adc.read()  # Should be 620-2790 for 0-100 PSI range
+   >>> adc.read()  # Should be 620-2790 for 0–690 kPa (0–100 PSI) range
    ```
 
 3. Verify pressure transducer type:
@@ -526,7 +526,7 @@ When experiencing issues:
 
 4. Monitor serial console for telemetry output:
    ```
-   SPD:12.5 PSI:35.2 T:95/210/45 SRV:102
+   SPD:12.5 PSI:35.2 T:95/210/45 SRV:102  (243 kPa)
    ```
 
 ---

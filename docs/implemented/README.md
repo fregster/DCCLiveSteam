@@ -66,6 +66,19 @@ This directory contains documentation for **completed and deployed** features of
 
 ---
 
+### BLE Configuration Variable (CV) Updates
+**Status:** Production (v1.2.0)  
+**User Experience-Critical:** YES
+
+- [ble-cv-update-technical.md](ble-cv-update-technical.md) - BLE RX infrastructure, CV validation logic, command processing, timing analysis, 22 comprehensive unit tests
+- [ble-cv-update-capabilities.md](ble-cv-update-capabilities.md) - Over-the-air CV updates, mobile app usage, real-world tuning examples, troubleshooting guide
+
+**What it does:** Change any CV wirelessly via Bluetooth using simple text commands (`CV32=20.0`). No USB cable, no bench programming, no powered track required. Track-side tuning during operating sessions, fleet management, real-time parameter adjustment while monitoring telemetry. Validated against hardcoded safety bounds (23 CVs), atomic updates, persistent storage, audit trail logging.
+
+**Key Improvement:** Transforms configuration workflow from 15-20 minutes (USB connect, file edit, upload) to <1 second (BLE command). Enables real-time tuning while locomotive running - send command, observe telemetry, iterate. Ideal for operating sessions, pressure tuning, servo response adjustment, seasonal thermal limit changes.
+
+---
+
 ### Safety-First Watchdog Logic
 **Status:** Production (v1.0.0)  
 **Safety-Critical:** YES

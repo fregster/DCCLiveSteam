@@ -23,10 +23,10 @@ You send DCC speed command 64 (half throttle)
 │  └─ DCC 64 → 50% throttle open
 │
 ├─ Stage 2: Account for steam pressure
-│  └─ If boiler at 50 PSI: Reduce to 25% available power
+│  └─ If boiler at 345 kPa (50 PSI): Reduce to 25% available power
 │
 ├─ Stage 3: Convert to model velocity
-│  └─ HO scale model at 50% throttle, 100 PSI → 12.75 cm/s
+│  └─ HO scale model at 50% throttle, 689 kPa (100 PSI) → 12.75 cm/s
 │
 Result: Locomotive accelerates smoothly and realistically
 ```
@@ -49,14 +49,14 @@ The Physics Engine converts this to throttle position:
 The Physics Engine reduces available power proportionally to boiler pressure:
 
 ```
-At 100 PSI (full pressure):  Can use 100% of available power
-At 80 PSI:  Can use 80% of available power
-At 50 PSI:  Can use 50% of available power
-At 20 PSI:  Can use 20% of available power
-Below 5 PSI: Insufficient steam to move (stops)
+At 689 kPa (100 PSI) (full pressure):  Can use 100% of available power
+At 552 kPa (80 PSI):  Can use 80% of available power
+At 345 kPa (50 PSI):  Can use 50% of available power
+At 138 kPa (20 PSI):  Can use 20% of available power
+Below 34 kPa (5 PSI): Insufficient steam to move (stops)
 ```
 
-**Result:** If you command 100% throttle but only have 50 PSI, locomotive moves at 50% power—just like real steam.
+**Result:** If you command 100% throttle but only have 345 kPa (50 PSI), locomotive moves at 50% power—just like real steam.
 
 ### Stage 3: Scale Conversion
 
@@ -70,7 +70,7 @@ The Physics Engine uses **CV39 (prototype speed)** and **CV40 (scale ratio)** to
 Formula:
 Model velocity (cm/s) = (Prototype KPH × 27.778) / Scale ratio × (Throttle / 100)
 
-Example (HO scale, 80 KPH prototype, full throttle, 100 PSI):
+Example (HO scale, 80 KPH prototype, full throttle, 689 kPa [100 PSI]):
 = (80 × 27.778) / 87.1 × (100/100)
 = 25.51 cm/s
 = About 1.5 meters/minute

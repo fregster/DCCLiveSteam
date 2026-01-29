@@ -1,4 +1,4 @@
-Here is the comprehensive list of capabilities for the Mallard-ESP32 control system, formatted for your project documentation.
+Here is the comprehensive list of capabilities for the ESP32 live steam locomotive control system, formatted for your project documentation.
 
 1. System Initialization & Provisioning
 Auto-Provisioning: On boot, the system checks for necessary configuration files (config.json, error_log.json) and automatically creates them with factory defaults if they are missing or corrupted.
@@ -53,7 +53,7 @@ Jitter-Free Timing: Dynamically adjusts loop sleep times to maintain a rock-soli
 Flash Stewardship: Protects internal storage by pushing telemetry only via BLE/USB and reserving flash writes exclusively for critical errors or config changes.
 
 7. Observability & Diagnostics
-Live BLE Telemetry: Streams real-time Speed, PSI, Temperature, and Servo Duty cycles to a smartphone or computer without interrupting control logic.
+Live BLE Telemetry: Streams real-time speed, pressure (kPa; PSI in brackets), temperature, and servo duty cycles to a smartphone or computer without interrupting control logic.
 
 USB Serial Debugging: Provides a "Black Box" log dump and real-time status updates for bench testing.
 

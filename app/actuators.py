@@ -253,7 +253,7 @@ class PressureController:
     def shutdown(self) -> None:
         """Kills all heaters immediately during emergency shutdown.
 
-        Why: Called by Mallard.die() when Watchdog.check() detects thermal runaway,
+        Why: Called by Locomotive.die() when Watchdog.check() detects thermal runaway,
         pressure overshoot, or signal loss. Must execute in <10ms.
 
         Safety: Setting duty=0 instantly cuts heater power. Boiler cooling time constant

@@ -1,5 +1,5 @@
 """
-Sensor interface suite for Mallard locomotive.
+Sensor interface suite for live steam locomotive.
 Handles ADC reading with oversampling, temperature conversion, encoder tracking,
 and sensor health monitoring for graceful degradation on failure.
 """
