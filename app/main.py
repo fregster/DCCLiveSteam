@@ -87,7 +87,7 @@ class Locomotive:
         self.green_led = GreenStatusLED(machine.Pin(self.cv.get('PIN_GREEN_LED', 13)), pwm=None)
         # BLE_UART expects cv and self.serial_queue for logging
         self.ble = BLE_UART(name=str(cv.get('BLE_NAME', 'LiveSteam')))
-        self.telemetry_manager = TelemetryManager(self.ble, self.mech)
+        self.telemetry_manager = TelemetryManager(self.ble, self.mech, self.status_reporter)
         self.status_led_manager = StatusLEDManager(self.green_led)
         self.pressure_manager = PressureControlManager(self.pressure)
         self.status_reporter = StatusReporter(self.serial_queue)
@@ -293,12 +293,9 @@ def run() -> None:
 
         # TELEMETRY (every 1 second)
         now = time.ticks_ms()
-        if time.ticks_diff(now, last_telemetry) > 1000:
-            loco.telemetry_manager.queue_telemetry(velocity_cms, pressure, temps)
-            loco.status_reporter.process(
-                velocity_cms, pressure, temps, loco.mech.current, loop_count
-            )
-            last_telemetry = now
+        loco.telemetry_manager.process_periodic(
+            velocity_cms, pressure, temps, loco.mech.current, loop_count, now_ms=now
+        )
         loop_count += 1
 
         # BACKGROUND TASK PROCESSING
