@@ -21,6 +21,7 @@ CV,Parameter,Default,Unit,Description
 48,Whistle Offset,5,Deg,Degrees from neutral to trigger whistle blow-off.
 49,Travel Time,1000,ms,Time to sweep from 0% to 100% regulator open.
 84,Graceful Degradation,1,Bool,"1 = Smooth deceleration on sensor failure; 0 = Immediate shutdown."
-87,Decel Rate,10.0,cm/s²,Speed of controlled deceleration during sensor failure graceful shutdown.
+
 
 51,Power Budget,4.5,Amps,Maximum total system current draw (all loads). System will shed non-critical loads or reduce power to stay within this limit. Exceeding this triggers a safety shutdown.
+52,Speed Control Mode,1,Bool,0 = DCC speed sets regulator directly (manual throttle); 1 = Feedback speed control (cruise control, default)

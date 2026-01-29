@@ -1,12 +1,13 @@
 """
-Unit tests for TelemetryManager (app/telemetry.py)
+Unit tests for TelemetryManager (app/managers/telemetry_manager.py)
 """
-from app.telemetry import TelemetryManager
+from app.managers.telemetry_manager import TelemetryManager
 from unittest.mock import MagicMock
 
 def test_queue_telemetry():
     ble = MagicMock()
     mech = MagicMock(current=123)
+    mech.servo_current = 123
     tm = TelemetryManager(ble, mech)
     tm.queue_telemetry(10.0, 1.0, (100.0, 200.0, 50.0))
     ble.send_telemetry.assert_called_with(10.0, 1.0, (100.0, 200.0, 50.0), 123)

@@ -1,3 +1,11 @@
+## Speed Control Mode (CV52)
+
+Allows the user to select between two speed control behaviours:
+
+- **CV52 = 1 (default):** Feedback speed control (cruise control). DCC speed sets the target speed, and the regulator is automatically managed to reach and maintain that speed using a feedback loop.
+- **CV52 = 0:** Direct throttle mode. DCC speed command sets the regulator (throttle) position directly, bypassing the feedback loop. This is similar to manual throttle control.
+
+This feature is safety-critical for prototypical operation and user flexibility. See CV.md for configuration details.
 Here is the comprehensive list of capabilities for the ESP32 live steam locomotive control system, formatted for your project documentation.
 
 1. System Initialization & Provisioning

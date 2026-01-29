@@ -203,25 +203,67 @@ Args:
 ## 📁 Project Structure
 
 ### **Deployment Code (`app/` directory)**
-All code that runs on the TinyPICO must be in the `app/` package:
+All code that runs on the TinyPICO must be in the `app/` package, with a rationalised, non-duplicative structure. Each subsystem has a clear, single location for its logic and manager classes:
+
 ```
 app/
-├── __init__.py          # Package initialization
-├── main.py              # Locomotive class (main control loop)
-├── config.py            # CV configuration management (CV_DEFAULTS + file I/O)
-├── physics.py           # Speed/velocity calculations
-├── sensors.py           # ADC reading (thermistors, pressure)
-├── actuators.py         # Servo/heater control
-├── dcc_decoder.py       # DCC packet parsing
-├── safety.py            # Watchdog monitoring
-├── ble_uart.py          # BLE telemetry
-└── ble_advertising.py   # BLE advertising helper
+├── __init__.py
+├── main.py                  # Locomotive orchestrator (main control loop, minimal logic)
+├── config.py                # CV configuration management (CV_DEFAULTS + file I/O)
+├── physics.py               # Speed/velocity calculations
+├── dcc_decoder.py           # DCC packet parsing
+├── safety.py                # Watchdog monitoring
+├── status_utils.py          # StatusReporter (status message formatting/queueing)
+├── actuators/
+│   ├── __init__.py
+│   ├── actuators.py         # Composite Actuators interface (all hardware control, enforces limits)
+│   ├── leds.py              # GreenStatusLED, FireboxLED, StatusLEDManager (all status LED logic)
+│   ├── pressure_controller.py # PressureController (hardware-level pressure logic)
+│   ├── servo.py             # MechanicalMapper (servo, regulator, whistle)
+│   └── heater.py            # Heater control (if separate)
+├── managers/
+│   ├── __init__.py
+│   ├── telemetry_manager.py # TelemetryManager (BLE telemetry queueing/sending)
+│   ├── power_manager.py     # PowerManager (current estimation, load-shedding)
+│   ├── pressure_manager.py  # PressureManager (pressure logic, PID, arbitration)
+│   └── speed_manager.py     # SpeedManager (speed, regulator, direction logic)
+├── background_tasks/
+│   ├── __init__.py
+│   ├── serial_print_queue.py # SerialPrintQueue (non-blocking serial output)
+│   ├── file_write_queue.py   # FileWriteQueue (non-blocking file writes)
+│   ├── garbage_collector.py  # GarbageCollector (scheduled GC)
+│   ├── cached_sensor_reader.py # CachedSensorReader (sensor caching)
+│   └── encoder_tracker.py    # EncoderTracker (if used)
+├── sensors/
+│   ├── __init__.py          # SensorSuite (unified sensor interface)
+│   ├── pressure_sensor.py   # Pressure sensor logic
+│   ├── speed_sensor.py      # Speed/encoder logic
+│   ├── temperature_sensor.py # Temperature sensor logic
+│   ├── track_voltage_sensor.py # Track voltage logic
+│   └── health.py            # Sensor health validation
+└── ble_uart.py              # BLE UART interface
+└── ble_advertising.py       # BLE advertising helper
 ```
+
+**Key Rationalisation Rules:**
+- All status LED logic (including `StatusLEDManager`) lives in `actuators/leds.py` only.
+- All hardware-level actuator logic (PWM, servo, etc.) lives in `actuators/`.
+- All subsystem manager logic (telemetry, power, pressure, speed) lives in `managers/` and only sends commands via the composite `Actuators` interface.
+- All background task classes (queues, GC, sensor caching) live in `background_tasks/` as individual modules.
+- `main.py` contains only the Locomotive orchestrator and the main loop, delegating to manager classes.
+- No duplicate or misplaced manager classes or modules.
 
 **Import Convention:** Use relative imports within `app/` package:
 ```python
 from .config import CVConfig
 from .sensors import read_temperature
+from .actuators.leds import StatusLEDManager
+from .managers.pressure_manager import PressureManager
+from .managers.power_manager import PowerManager
+from .managers.telemetry_manager import TelemetryManager
+from .managers.speed_manager import SpeedManager
+from .actuators import Actuators
+from .status_utils import StatusReporter
 ```
 
 ### **Testing Code (`tests/` directory)**

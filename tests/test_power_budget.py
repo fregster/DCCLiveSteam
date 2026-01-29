@@ -53,7 +53,7 @@ def test_power_budget_enforcement_reduces_load(monkeypatch):
         87: 10.0,
         88: 20
     }
-    from app.power import PowerMonitor
+    from app.managers.power_manager import PowerManager
     with patch('app.main.DCCDecoder'), \
          patch('app.main.PhysicsEngine'), \
          patch('app.main.MechanicalMapper'), \
@@ -66,15 +66,33 @@ def test_power_budget_enforcement_reduces_load(monkeypatch):
          patch('app.main.GarbageCollector'), \
          patch('app.main.FireboxLED'), \
          patch('app.main.GreenStatusLED'):
+        shutdown_called = {}
         class DummyLoco:
             def __init__(self):
                 self.cv = cv
                 self.pressure = DummyPressure()
                 self.mech = DummyMech()
                 self.log_event = lambda *a, **kw: None
-                self.die = lambda *a, **kw: None
+                self._boiler_pwm = 1023
+                self._super_pwm = 1023
+                def die(*a, **kw):
+                    shutdown_called['cause'] = kw.get('cause', a[0] if a else None)
+                self.die = die
+                self.safety_shutdown = lambda cause: die(cause)
+            @property
+            def boiler_pwm(self):
+                return self._boiler_pwm
+            @property
+            def super_pwm(self):
+                return self._super_pwm
+            def set_boiler_pwm(self, value):
+                self._boiler_pwm = value
+                self.pressure.boiler_heater.duty(value)
+            def set_super_pwm(self, value):
+                self._super_pwm = value
+                self.pressure.super_heater.duty(value)
         loco = DummyLoco()
-        pm = PowerMonitor(loco)
+        pm = PowerManager(loco, {})
         pm.power_budget_amps = 1.0
         pm.process()
         assert loco.pressure.boiler_heater.duty_calls[0] < 1023

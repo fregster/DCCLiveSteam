@@ -66,6 +66,7 @@ CV_DEFAULTS = {
     "87": 10.0,      # Sensor Failure Decel Rate (cm/s²)
     "88": 20,        # Degraded Mode Timeout (seconds)
     "51": 4.5,       # Power Budget (Amps)
+    "52": 1,         # Speed Control Mode (0=Direct throttle, 1=Feedback speed control)
 }
 
 def ensure_environment() -> None:

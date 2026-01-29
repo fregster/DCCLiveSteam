@@ -1,3 +1,14 @@
+### Speed/Throttle Not Responding as Expected
+
+**Symptom:** Locomotive does not accelerate smoothly, or throttle does not match DCC speed command.
+
+**Possible Cause:** CV52 (Speed Control Mode) is set incorrectly for your desired behaviour.
+
+**Solution:**
+- Set CV52 = 1 for cruise control (automatic speed regulation).
+- Set CV52 = 0 for direct throttle (manual regulator control).
+
+Refer to CV.md for details on setting CV52.
 # Troubleshooting Guide
 
 This guide helps diagnose and resolve common issues with the live steam locomotive controller.

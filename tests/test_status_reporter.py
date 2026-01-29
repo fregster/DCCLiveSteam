@@ -1,7 +1,7 @@
 """
-Unit tests for StatusReporter (app/status_reporter.py)
+Unit tests for StatusReporter (app/status_utils.py)
 """
-from app.status_reporter import StatusReporter
+from app.status_utils import StatusReporter
 from unittest.mock import MagicMock
 
 def test_process_enqueues_message():

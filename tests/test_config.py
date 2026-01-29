@@ -40,6 +40,7 @@ def test_ensure_environment_creates_config(temp_config_dir):
     assert "1" in data  # DCC address
     assert "42" in data  # Boiler temp limit
     assert "43" in data  # Superheater limit
+    assert "52" in data  # Speed Control Mode
 
 
 def test_ensure_environment_creates_error_log(temp_config_dir):
@@ -207,7 +208,8 @@ def test_cv_defaults_match_documentation():
         "51": "Power Budget",
         "84": "Graceful Degradation",
         "87": "Decel Rate",
-        "88": "Degraded Timeout"
+        "88": "Degraded Timeout",
+        "52": "Speed Control Mode"
     }
     
     # Verify each documented CV has a default

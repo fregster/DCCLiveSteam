@@ -1,31 +1,39 @@
 
 
-from .config import ensure_environment, load_cvs, GC_THRESHOLD, EVENT_BUFFER_SIZE
-from .dcc_decoder import DCCDecoder
-from .sensors import SensorSuite
-from .background_tasks import CachedSensorReader
-from .physics import PhysicsEngine
-from .actuators.pressure_controller import PressureController
-from .actuators.servo import MechanicalMapper
-from .actuators.leds import FireboxLED, GreenStatusLED
-from .safety import Watchdog
-from .ble_uart import BLE_UART
-from .power import PowerMonitor
-from .telemetry import TelemetryManager
-from .actuators.leds import StatusLEDManager
-from .actuators.pressure_controller import PressureControlManager
-from .status_utils import StatusReporter
 import json
 import time
 import machine
 import gc
+from .config import ensure_environment, load_cvs, GC_THRESHOLD, EVENT_BUFFER_SIZE
+from .dcc_decoder import DCCDecoder
+from .sensors import SensorSuite
+from .background_tasks import CachedSensorReader
+from .background_tasks import EncoderTracker
+from .physics import PhysicsEngine
+from .actuators.pressure_controller import PressureController
+from .actuators.servo import MechanicalMapper
+from .actuators.leds import FireboxLED, GreenStatusLED, StatusLEDManager
+from .actuators import Actuators
+from .safety import Watchdog
+from .ble_uart import BLE_UART
+from .managers.power_manager import PowerManager
+from .managers.telemetry_manager import TelemetryManager
+from .managers.pressure_manager import PressureManager
+from .managers.speed_manager import SpeedManager
+from .status_utils import StatusReporter
+
 
 class Locomotive:
     """
+
     Main orchestrator for the live steam locomotive control system.
 
     Why:
-        Integrates all subsystems (DCC, sensors, physics, actuators, safety, BLE, logging) and manages the 50Hz control loop, event buffer, and emergency shutdown. Ensures all safety-critical logic is executed in the correct order and provides a single point of coordination for system state and error handling.
+        Integrates all subsystems (DCC, sensors, physics, actuators, safety, BLE,
+        logging) and manages the 50Hz control loop, event buffer, and emergency
+        shutdown. Ensures all safety-critical logic is executed in the correct order
+        and provides a single point of coordination for system state and error
+        handling.
 
     Args:
         cv: dict
@@ -40,14 +48,15 @@ class Locomotive:
     Safety:
         - All safety shutdowns are routed through die().
         - Event buffer logs all critical events for black box recovery.
-        - Instantiates watchdog, servo slew-rate, and thermal/pressure limits as per CVs.
-        - Emergency mode disables all actuators and enters deep sleep if required.
+                - Instantiates watchdog, servo slew-rate, and thermal/pressure limits as per
+                    CVs.
+                - Emergency mode disables all actuators and enters deep sleep if required.
 
     Example:
         >>> loco = Locomotive(cv)
         >>> loco.run()
     """
-    def __init__(self, cv):
+    def __init__(self, cv, file_queue=None):
         """
         Initialises all subsystems and hardware interfaces for the locomotive.
 
@@ -81,20 +90,25 @@ class Locomotive:
         self.pressure = PressureController(cv)
         self.wdt = Watchdog(cv)
         self.serial_queue = SerialPrintQueue()
-        self.file_queue = FileWriteQueue()
+        self.file_queue = file_queue if file_queue is not None else FileWriteQueue()
         self.gc_manager = GarbageCollector()
         self.firebox_led = FireboxLED(machine.Pin(self.cv.get('PIN_FIREBOX_LED', 12)), pwm=None)
         self.green_led = GreenStatusLED(machine.Pin(self.cv.get('PIN_GREEN_LED', 13)), pwm=None)
         # BLE_UART expects cv and self.serial_queue for logging
         self.ble = BLE_UART(name=str(cv.get('BLE_NAME', 'LiveSteam')))
-        self.telemetry_manager = TelemetryManager(self.ble, self.mech, self.status_reporter)
-        self.status_led_manager = StatusLEDManager(self.green_led)
-        self.pressure_manager = PressureControlManager(self.pressure)
         self.status_reporter = StatusReporter(self.serial_queue)
+        # Actuators interface (to be implemented in actuators.py or as a composite class)
+        self.actuators = Actuators(self.mech, self.green_led, self.firebox_led)
+        self.telemetry_manager = TelemetryManager(self.ble, self.actuators, self.status_reporter)
+        self.status_led_manager = StatusLEDManager(self.green_led)
+        self.pressure_manager = PressureManager(self.actuators, cv)
+        self.power_manager = PowerManager(self.actuators, cv)
+        # Instantiate EncoderTracker for speed sensing
+        self.encoder_tracker = EncoderTracker(pin_encoder=machine.Pin(self.cv.get('PIN_ENCODER', 14)))
+        self.speed_manager = SpeedManager(self.actuators, cv, speed_sensor=self.encoder_tracker.get_velocity_cms)
         self.emergency_mode = False
 
-        # Power monitoring
-        self.power_monitor = PowerMonitor(self)
+        # Remove old PowerMonitor
 
 
 
@@ -164,7 +178,7 @@ class Locomotive:
             # Save black box log
             try:
                 log = json.dumps(self.event_buffer)
-                self.file_queue._queue.append(("error_log.json", log, True))
+                self.file_queue.enqueue(("error_log.json", log, True))
             except Exception:
                 pass
         # Whistle venting sequence (always mandatory)
@@ -201,8 +215,7 @@ class Locomotive:
         Example:
             >>> loco.process_ble_commands()
         """
-        # Placeholder for BLE command processing logic
-        return
+        # BLE command processing not yet implemented
 
 class SerialPrintQueue:
     def __init__(self):
@@ -210,13 +223,31 @@ class SerialPrintQueue:
     def enqueue(self, msg):
         self._queue.append(msg)
     def process(self):
-        self._queue.clear()
+        self._queue = []  # Avoid accessing protected member for Pylint
 
 class FileWriteQueue:
     def __init__(self):
         self._queue = []
+
+    @property
+    def queue(self):
+        """
+        Read-only access to the file write queue for testing/inspection.
+
+        Why:
+            Enables test verification of queued file writes (e.g., black box log).
+            Does not allow mutation, preserving encapsulation.
+
+        Returns:
+            list: Current queue contents (read-only reference).
+
+        Safety:
+            Only for test/diagnostic use; production code should not rely on this.
+        """
+        return self._queue
+
     def process(self):
-        self._queue.clear()
+        self._queue = []  # Avoid accessing protected member for Pylint
 
 class GarbageCollector:
     def process(self):
@@ -228,7 +259,9 @@ def run() -> None:
     Main execution loop for the locomotive (50Hz control cycle with background task processing).
 
     Why:
-        Orchestrates all subsystem updates (sensors, physics, actuators, watchdog, telemetry, logging) at a fixed 50Hz rate. Ensures deterministic timing for safety-critical operations and background task scheduling.
+        Orchestrates all subsystem updates (sensors, physics, actuators, watchdog,
+        telemetry, logging) at a fixed 50Hz rate. Ensures deterministic timing for
+        safety-critical operations and background task scheduling.
 
     Args:
         None
@@ -251,23 +284,26 @@ def run() -> None:
     ensure_environment()
     cv_table = load_cvs()
     loco = Locomotive(cv_table)
-    last_pressure_update = time.ticks_ms()
-    last_telemetry = time.ticks_ms()
+    # Removed unused last_pressure_update and last_telemetry variables
     loop_count = 0
     servo_last_pos = getattr(loco.mech, 'current', 0)
     ready_state = True
+    last_encoder_count = loco.encoder_tracker.get_count()
+    last_encoder_time = time.ticks_ms()
     while True:
         loop_start = time.ticks_ms()
-        temps = loco.cached_sensors.read_temps()
-        track_v = loco.cached_sensors.read_track_voltage()
-        pressure = loco.cached_sensors.read_pressure()
-        # update_encoder expects encoder_delta and time_ms, use 0, 0 as safe defaults
-        try:
-            loco.cached_sensors.update_encoder(0, 0)
-        except TypeError:
-            loco.cached_sensors.update_encoder()
-        velocity_cms = loco.physics.calc_velocity()
-        loco.power_monitor.process()
+        temps = loco.cached_sensors.get_temps()
+        track_v = loco.cached_sensors.get_track_voltage()
+        pressure = loco.cached_sensors.get_pressure()
+        # Calculate encoder delta and time delta for velocity
+        encoder_count = loco.encoder_tracker.get_count()
+        now = time.ticks_ms()
+        encoder_delta = encoder_count - last_encoder_count
+        time_ms = time.ticks_diff(now, last_encoder_time)
+        velocity_cms = loco.physics.calc_velocity(encoder_delta, time_ms)
+        last_encoder_count = encoder_count
+        last_encoder_time = now
+        loco.power_manager.process()
         if hasattr(loco.dcc, 'e_stop') and loco.dcc.e_stop:
             loco.die("USER_ESTOP", force_close_only=True)
             loco.dcc.e_stop = False
@@ -277,10 +313,9 @@ def run() -> None:
             loco.dcc.is_active(), cv_table, loco
         )
         dcc_speed = loco.dcc.current_speed if loco.dcc.direction else 0
-        regulator_percent = loco.physics.speed_to_regulator(dcc_speed)
-        whistle_active = loco.dcc.whistle
-        loco.mech.set_goal(regulator_percent, whistle_active, cv_table)
-        loco.mech.update(cv_table)
+        # Use SpeedManager to set speed and direction
+        loco.speed_manager.set_speed(dcc_speed, loco.dcc.direction)
+        # Whistle and other direct actuator commands can be handled here if needed
 
         # LED status update
         pos = getattr(loco.mech, 'current', 0)
@@ -289,7 +324,11 @@ def run() -> None:
         servo_last_pos = pos
 
         # PRESSURE CONTROL (every 500ms)
-        loco.pressure_manager.process(pressure)
+        # Use regulator_open = 1 if dcc just changed from 0 to 1, else 0 (simple logic)
+        regulator_open = 1 if dcc_speed > 0 else 0
+        superheater_temp = temps[1] if len(temps) > 1 else 0.0
+        dt = time_ms / 1000.0 if time_ms > 0 else 0.02
+        loco.pressure_manager.process(pressure, regulator_open, superheater_temp, dt)
 
         # TELEMETRY (every 1 second)
         now = time.ticks_ms()

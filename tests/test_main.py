@@ -149,21 +149,23 @@ def test_die_saves_black_box_to_flash(cv_table, mock_subsystems):
 
     Safety: Flash write queued non-blocking, failures don't prevent shutdown.
     """
-    from app.main import Locomotive
+    from app.main import Locomotive, FileWriteQueue
     m_open = mock_open(read_data='[]')
     with patch('builtins.open', m_open), \
          patch('machine.deepsleep'), \
          patch('app.main.time.sleep'), \
          patch('json.load', return_value=[]):
-        loco = Locomotive(cv_table)
+        file_queue = FileWriteQueue()
+        file_queue.enqueue = MagicMock()
+        loco = Locomotive(cv_table, file_queue=file_queue)
         loco.log_event("EVENT1", "data1")
         loco.die("DRY_BOIL")
 
         # Verify log write was queued (non-blocking)
-        assert len(loco.file_queue._queue) > 0
-        filepath, content, priority = loco.file_queue._queue[0]
-        assert filepath == "error_log.json"
-        assert priority is True  # Emergency logs are high priority
+        file_queue.enqueue.assert_called()
+        args, kwargs = file_queue.enqueue.call_args
+        assert args[0][0] == "error_log.json"
+        assert args[0][2] is True  # Emergency logs are high priority
 
 
 def test_die_enables_emergency_mode(cv_table, mock_subsystems):
@@ -369,83 +371,111 @@ def test_control_loop_watchdog_check_called(cv_table, mock_subsystems):
     movement during emergency conditions.
     """
     import importlib
+    import contextlib
     check_called = {'called': False}
+
     def check_side_effect(*args, **kwargs):
         print("DEBUG: Watchdog.check called")
         check_called['called'] = True
 
-    import contextlib
     class WatchdogMock:
         def __init__(self, *args, **kwargs):
             pass
         def check(self, *args, **kwargs):
             check_side_effect()
-    with patch('app.main.Watchdog', new=WatchdogMock), \
-         patch('app.safety.Watchdog', new=WatchdogMock):
-        import importlib
-        importlib.invalidate_caches()
-        importlib.reload(importlib.import_module('app.main'))
-        from app.main import run
+
+    def patch_watchdog():
+        return patch('app.main.Watchdog', new=WatchdogMock), patch('app.safety.Watchdog', new=WatchdogMock)
+
+    def patch_main_mocks():
+        return [
+            patch('app.main.MechanicalMapper'),
+            patch('app.main.DCCDecoder'),
+            patch('app.main.SensorSuite'),
+            patch('app.main.PhysicsEngine'),
+            patch('app.main.PressureController'),
+            patch('app.main.BLE_UART'),
+            patch('app.main.CachedSensorReader'),
+            patch('app.main.SerialPrintQueue'),
+            patch('app.main.FileWriteQueue'),
+            patch('app.main.GarbageCollector'),
+            patch('app.main.ensure_environment'),
+            patch('app.main.load_cvs', return_value=cv_table),
+            patch('app.main.time.sleep_ms'),
+            patch('app.main.gc.mem_free', return_value=100000),
+        ]
+
+    def setup_mocks(mocks):
+        mock_cached_inst = mocks[6].return_value
+        mock_cached_inst.update_encoder = lambda a, b: None
+        mock_cached_inst.read_temps = lambda: (95.0, 210.0, 45.0)
+        mock_cached_inst.read_track_voltage = lambda: 14000
+        mock_cached_inst.read_pressure = lambda: 50.0
+        mock_cached_inst.get_temps = lambda: (95.0, 210.0, 45.0)
+        mock_cached_inst.get_track_voltage = lambda: 14000
+        mock_cached_inst.get_pressure = lambda: 50.0
+
+        mock_physics_inst = mocks[3].return_value
+        mock_physics_inst.calc_velocity.return_value = 35.2
+        mock_physics_inst.speed_to_regulator.return_value = 50.0
+
+        mock_encoder_inst = mocks[7].return_value
+        mock_encoder_inst.get_velocity_cms.return_value = 35.2
+
+        mock_dcc_inst = mocks[1].return_value
+        mock_dcc_inst.current_speed = 64
+        mock_dcc_inst.direction = 1
+        mock_dcc_inst.whistle = False
+        mock_dcc_inst.e_stop = False
+        mock_dcc_inst.is_active.return_value = True
+
+        mock_pressure_inst = mocks[4].return_value
+        class DummyHeater:
+            def __init__(self, duty=512):
+                self._duty = duty
+            def duty(self, value):
+                self._duty = value
+        mock_pressure_inst.boiler_heater = DummyHeater(512)
+        mock_pressure_inst.super_heater = DummyHeater(512)
+
+        mock_mech_inst = mocks[0].return_value
+        mock_mech_inst.current = 130.0
+
+    importlib.invalidate_caches()
+    importlib.reload(importlib.import_module('app.main'))
+    from app.main import run
+    print("DEBUG: About to call run()")
+    ticks_sequence = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
+    from unittest.mock import MagicMock
+    def stop_after_first_sleep(*args, **kwargs):
+        raise StopIteration()
+    with patch_watchdog()[0], patch_watchdog()[1]:
+        main_patches = patch_main_mocks()
         with contextlib.ExitStack() as stack:
-            mocks = [
-                stack.enter_context(patch('app.main.MechanicalMapper')),
-                stack.enter_context(patch('app.main.DCCDecoder')),
-                stack.enter_context(patch('app.main.SensorSuite')),
-                stack.enter_context(patch('app.main.PhysicsEngine')),
-                stack.enter_context(patch('app.main.PressureController')),
-                stack.enter_context(patch('app.main.BLE_UART')),
-                stack.enter_context(patch('app.main.CachedSensorReader')),
-                stack.enter_context(patch('app.main.SerialPrintQueue')),
-                stack.enter_context(patch('app.main.FileWriteQueue')),
-                stack.enter_context(patch('app.main.GarbageCollector')),
-                stack.enter_context(patch('app.main.ensure_environment')),
-                stack.enter_context(patch('app.main.load_cvs', return_value=cv_table)),
-                stack.enter_context(patch('app.main.time.sleep_ms')),
-                stack.enter_context(patch('app.main.gc.mem_free', return_value=100000)),
-            ]
-
-            # Set up all mocks and their return values
-            mock_cached_inst = mocks[6].return_value
-            mock_cached_inst.read_temps.return_value = (95.0, 210.0, 45.0)
-            mock_cached_inst.read_track_voltage.return_value = 14000
-            mock_cached_inst.read_pressure.return_value = 50.0
-            mock_cached_inst.get_temps.return_value = (95.0, 210.0, 45.0)
-            mock_cached_inst.get_track_voltage.return_value = 14000
-            mock_cached_inst.get_pressure.return_value = 50.0
-
-            mock_physics_inst = mocks[3].return_value
-            mock_physics_inst.calc_velocity.return_value = 35.2
-            mock_physics_inst.speed_to_regulator.return_value = 50.0
-
-            mock_encoder_inst = mocks[7].return_value
-            mock_encoder_inst.get_velocity_cms.return_value = 35.2
-
-            mock_dcc_inst = mocks[1].return_value
-            mock_dcc_inst.current_speed = 64
-            mock_dcc_inst.direction = 1
-            mock_dcc_inst.whistle = False
-            mock_dcc_inst.e_stop = False
-            mock_dcc_inst.is_active.return_value = True
-
-            mock_pressure_inst = mocks[4].return_value
-            class DummyHeater:
-                def __init__(self, duty=512):
-                    self._duty = duty
-                def duty(self, value):
-                    self._duty = value
-            mock_pressure_inst.boiler_heater = DummyHeater(512)
-            mock_pressure_inst.super_heater = DummyHeater(512)
-
-            mock_mech_inst = mocks[0].return_value
-            mock_mech_inst.current = 130.0
-
-            print("DEBUG: About to call run()")
-            ticks_sequence = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
+            mocks = [stack.enter_context(p) for p in main_patches]
+            setup_mocks(mocks)
             with patch('app.main.time.ticks_ms', side_effect=ticks_sequence):
-                def stop_after_first_sleep(*args, **kwargs):
-                    raise StopIteration()
                 with patch('app.main.time.sleep_ms', side_effect=stop_after_first_sleep):
-                    with pytest.raises(StopIteration):
-                        run()
-            print("DEBUG: Finished run() call")
-            assert check_called['called']
+                    with patch('app.ble_uart.bluetooth.BLE', new=MagicMock()):
+                        with patch('app.ble_uart.BLE_UART.__init__', autospec=True) as mock_ble_init:
+                            def ble_uart_init(self, name="LiveSteam"):
+                                self._ble = MagicMock()
+                                self._ble.gatts_register_services.return_value = [(1, 2)]
+                                self._ble.active.return_value = None
+                                self._ble.irq.return_value = None
+                                self._connected = False
+                                self._name = name
+                                self._telemetry_buffer = None
+                                self._telemetry_pending = False
+                                self.rx_queue = []
+                                self._rx_buffer = bytearray()
+                                self._max_rx_buffer = 128
+                                self._max_rx_queue = 16
+                                self._uart_uuid = MagicMock()
+                                self._handle_tx, self._handle_rx = (1, 2)
+                                self._services = [(1, 2)]
+                            mock_ble_init.side_effect = ble_uart_init
+                            with pytest.raises(StopIteration):
+                                run()
+    print("DEBUG: Finished run() call")
+    assert check_called['called']

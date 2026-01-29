@@ -1,7 +1,7 @@
 """
-Unit tests for StatusLEDManager (app/status_led.py)
+Unit tests for StatusLEDManager (app/actuators/leds.py)
 """
-from app.status_led import StatusLEDManager
+from app.actuators.leds import StatusLEDManager
 from unittest.mock import MagicMock
 
 def test_update_motion():
