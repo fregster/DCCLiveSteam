@@ -1,3 +1,16 @@
+### 2. Isolation Test
+Measure resistance between adjacent pins:
+* **Pass criteria:** > 10MΩ (confirms no shorts)
+
+### 3. I2C Capacitance (Optional but recommended)
+Connect LCR meter to pins 6 and 7 at Tender end:
+* Measure capacitance with Loco end open circuit
+* **Pass criteria:** < 100pF (confirms cable quality)
+
+### 4. Power Drop Test
+Apply 14V to pin 1, ground to pin 2 at Tender end:
+* Measure voltage at Loco end while drawing 500mA load
+* **Pass criteria:** > 13.5V (confirms acceptable voltage drop)
 # 5. Umbilical Wiring Schedule (`UMBILICAL.md`)
 
 ## 5.1 Overview

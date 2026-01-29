@@ -7,14 +7,14 @@ The Tender is the "Brain" of the system, housing the TinyPICO and command signal
 | :--- | :--- | :--- |
 | **MCU** | TinyPICO (ESP32-PICO-D4) | Master control, BLE host, and I2C Master. |
 | **Signal Isolator** | 6N137 High-Speed Opto | Decouples DCC track voltage from ESP32 GPIO. |
-| **Step-Down Regulator** | MP1584EN Buck Converter | Drops 17V track power to 5V logic power. |
+| **Step-Down Regulator** | MP1584EN Buck Converter | Drops 14V track power to 5V logic power. |
 | **Power MOSFETs** | 2x IRLZ44N (TO-220) | PWM control for Boiler and Superheater heater elements. |
 | **Boiler Thermocouple** | Type-K + Amplifier | Direct temperature monitoring of boiler shell. |
 | **Water Level Sensor** | Conductive or Float | Detects low-water condition in tender boiler. |
 | **Stay-Alive** | 2x 1.0F 5.5V Supercaps | Provides backup power for the "Distress Whistle" sequence. |
 
 ## 2.2 Tender Internal Wiring (Pinout)
-* **VCC (Raw):** 17V Track Input to Buck Converter.
+* **VCC (Raw):** 14V Track Input to Buck Converter (OO scale DCC standard).
 * **VCC (5V):** Buck Output to TinyPICO 5V/USB Pin.
 * **GPIO 14:** DCC Signal Input (from Optocoupler Pin 6).
 * **GPIO 21/22:** I2C Bus (SDA/SCL) to boiler thermocouple amplifier and umbilical.
@@ -69,8 +69,8 @@ The Tender is the "Brain" of the system, housing the TinyPICO and command signal
 * No heatsink required at typical loads
 
 **MP1584EN Buck Converter:**
-* Efficiency: ~85% at 17V input, 5V @ 200mA output
-* Heat dissipation: ~0.5W (requires small heatsink if enclosed)
+* Efficiency: ~85% at 14V input, 5V @ 200mA output
+* Heat dissipation: ~0.4W (requires small heatsink if enclosed)
 * Input voltage range: 4.5V to 28V (tolerates track voltage variations)
 
 **Operating Range:** -20°C to +75°C ambient (industrial temperature rating)

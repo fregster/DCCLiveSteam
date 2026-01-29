@@ -1,3 +1,56 @@
+## 3.6 Servo and Sensor Mounting Requirements
+
+**Servo Mounting:**
+- Use rigid mounting bracket to prevent flex under load
+- Minimum stall torque: 2.0 kg·cm (MG90S meets requirement)
+- Ensure servo horn is aligned with valve spindle at neutral position
+- Avoid exposure to direct steam or radiant heat (mount behind thermal barrier if possible)
+- Use thread-locking compound on all mounting screws to prevent loosening from vibration
+
+**Thermal Sensor Mounting:**
+- Thermocouple/IR sensor must be clamped to target surface with thermal paste for best response
+- Maintain minimum 10mm clearance from high-voltage wiring
+- Route sensor cables away from heater elements and moving linkages
+
+**Pressure Sensor Placement:**
+- Mount on steam line with vibration-damping grommet
+- Avoid direct contact with superheater or boiler shell
+- Use PTFE tape on all threaded connections to prevent leaks
+## 3.5 MOSFET Gate Drive Circuit
+
+Each IRLZ44N requires:
+
+```
+ESP32 GPIO ──[100Ω]──┬─ MOSFET Gate
+                     │
+                    [10kΩ] Pull-down to GND
+                     │
+                    GND
+```
+
+* **100Ω Gate Resistor:** Limits gate charging current to ~30mA (safe for ESP32)
+* **10kΩ Pull-down:** Ensures MOSFET OFF during ESP32 boot/reset
+* **Flyback Diode:** 1N4007 across heater coil (cathode to V+, anode to drain)
+  - Clamps inductive kickback when MOSFET switches OFF
+  - Critical for preventing voltage spikes that could damage MOSFET
+
+**Circuit Protection:**
+* Heater coils are inductive loads; flyback protection is mandatory
+* Without flyback diode, back-EMF can exceed 100V during turn-off transients
+* Diode must be rated for heater current (minimum 1A, 1N4007 rated 1A continuous)
+## 3.3 Thermal Sensor Configuration
+
+| Sensor | I2C Address | Target Surface | Field of View | Temp Range |
+|:-------|:------------|:---------------|:--------------|:-----------|
+| MLX90614 #1 (Boiler) | 0x5A (Factory default) | Boiler shell | 90° cone | -40°C to 125°C |
+| MLX90614 #2 (Superheater) | 0x5B (Reprogrammed) | Steam pipe | 90° cone | -40°C to 385°C (Extended range variant) |
+
+**Important:** Use MLX90614ESF-DCI variant for Superheater (extended temperature range). Standard MLX90614ESF-BAA variant saturates at 125°C.
+
+**Mounting Requirements:**
+- Minimum clearance: 10mm from target surface
+- Maximum range: 50mm (accuracy degrades beyond this distance)
+- Avoid direct line-of-sight to flames or radiant heat sources
 # 3. Locomotive Hardware Specification
 
 ## 3.1 Actuation & Thermal Module
