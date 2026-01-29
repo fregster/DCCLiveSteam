@@ -240,49 +240,87 @@ from app.sensors import read_temperature
 ```
 
 ### **Documentation (`docs/` directory)**
-Documentation is organized into clear categories:
+Documentation is organized into clear categories with strict separation of concerns:
 
 **`docs/` (User Reference - Root Level)**
 User-facing reference documents that explain system capabilities and configuration:
 - `CV.md` - Complete CV (Configuration Variable) reference
 - `FUNCTIONS.md` - Function-by-function API documentation
 - `capabilities.md` - System capabilities and feature list
+- `DEPLOYMENT.md` - Installation and setup guide
+- `TROUBLESHOOTING.md` - Fault diagnosis and recovery
 
 **`docs/external-references/`**
 External specifications, standards, and third-party documentation:
 - `s-9.2.2_2012_10.pdf` - NMRA DCC standard specification
 - Add any other external PDFs, datasheets, or standards here
 
-**`docs/plans/`**
-Planning documents for future features and architectural decisions:
-- Feature proposals
-- Architectural design documents
-- Performance improvement plans
+**`docs/plans/` ⭐ PERMANENT PLANNING DOCUMENTS**
+Forward-looking planning documents for future features (PERMANENT, not temporary):
+- **Implementation plans:** Multi-phase feature designs ready for development
+  - Example: `BLE_CV_UPDATE_IMPLEMENTATION.md`, `SENSOR_FAILURE_GRACEFUL_DEGRADATION.md`
+  - Created: Completed during planning session, moved from WIP to here
+  - Used: Serves as development roadmap during implementation
+  - Lifecycle: Permanent reference (not deleted after implementation)
+- **Feature proposals:** Concepts under consideration
+- **Architecture documents:** Design decisions for major subsystems
+- **Performance plans:** Optimization strategies
+- **⚠️ NOT temporary tracking:** If a planning doc is in-progress, keep in WIP only
 
-**`docs/implemented/`**
-**COMPLETED** feature documentation (moved from copilot-wip when finished):
+**`docs/implemented/` ⭐ COMPLETED FEATURES**
+**PERMANENT** documentation for completed and deployed features:
 - Each feature has TWO documents:
-  - `feature-name-technical.md` - How it works (architecture, code, testing)
-  - `feature-name-capabilities.md` - What it does (user guide, examples)
-- Historical WIP documents from development
-- README.md listing all implemented features
+  - `feature-name-technical.md` - How it works (architecture, code, testing, CVs)
+  - `feature-name-capabilities.md` - What it does (user guide, examples, troubleshooting)
+- README.md listing all implemented features with status
+- **Lifecycle:** Created after deployment to v1.x.x release, remains permanent
 
-**`docs/copilot-wip/`**
-**ACTIVE** work-in-progress tracking documents (not user-facing):
-- Planning documents for pending features
-- Active development session notes
-- ⚠️ **RULE:** When feature is COMPLETE, it MUST be moved to `docs/implemented/`
+**`docs/copilot-wip/` ⚠️ TEMPORARY SESSION DOCUMENTS ONLY**
+**ACTIVE** work-in-progress tracking **ONLY during active development**:
+- Session notes and progress tracking during active work
+- Temporary verification documents for current session
+- **Lifespan:** Hours to days, deleted when session/feature complete
+- **NOT for:** Implementation plans (→ docs/plans/), completed features (→ docs/implemented/)
+
+**Documentation Routing:**
+
+```
+Planning new feature?
+├─ Multi-phase implementation plan → docs/plans/ (permanent)
+├─ Feature proposal concept → docs/plans/ (permanent)
+└─ Session tracking (in-progress) → docs/copilot-wip/ (temporary, delete when done)
+
+Feature implementation complete?
+├─ Code merged + tests passing + deployed → docs/implemented/ (permanent)
+├─ Create technical doc + capabilities doc → docs/implemented/
+└─ DELETE all WIP documents → Extracted info to code/docs already
+
+Ongoing session development?
+├─ Progress notes, debug logs, verification → docs/copilot-wip/ (delete when session ends)
+└─ Never: Permanent planning or implementation docs here
+```
+
+**Critical Rules (PREVENT confusion and document sprawl):**
+1. ✅ **Implementation plans belong in `docs/plans/`** - Not in WIP
+   - Example: "BLE_CV_UPDATE_IMPLEMENTATION.md" → `docs/plans/` immediately after planning
+2. ✅ **WIP folder is ONLY for temporary session documents** - Deleted when work completes
+   - Example: "Session_notes_2026-01-28.md" in WIP → Deleted end of session
+3. ✅ **Completed features belong in `docs/implemented/`** - Not in WIP or plans
+   - Example: After v1.1.0 release, move to `docs/implemented/` with technical + capabilities docs
+4. ❌ **Never:** Leave long-term docs in WIP folder (they get orphaned/forgotten)
 
 **Documentation Guidelines:**
-- **User docs** (root) → Clear, concise, example-driven
-- **External refs** → Standards, datasheets (read-only)
-- **Plans** → Forward-looking, design-focused
+- **User docs** (root) → Clear, concise, example-driven, end-user focused
+- **External refs** → Standards, datasheets (read-only, don't modify)
+- **Plans** → Forward-looking, permanent architectural/design decisions
 - **Implemented** → Completed features with technical + capabilities docs
-- **WIP docs** → Active development only, temporary documents
+- **WIP docs** → Temporary notes for active development, deleted when complete
 
 ---
 
 ## 🎯 Development Workflow
+
+**System Note:** The local development system (macOS) uses `python3` command rather than `python`. When running Python commands in the terminal, use `python3` explicitly (e.g., `python3 -m pytest`, `python3 -m pylint`). The virtual environment (`.venv/bin/python`) uses the correct interpreter automatically.
 
 ### **1. Before Writing Code**
 - Read relevant user documentation in `docs/`
@@ -322,17 +360,34 @@ pytest tests/test_complexity.py
 - Update `docs/capabilities.md` with user-friendly feature descriptions
 - Add progress notes to `docs/copilot-wip/` during active development
 
-### **5. Feature Completion & Documentation Migration**
+### **5. Feature Completion & Documentation Migration** 🔴 **MANDATORY - NOT OPTIONAL**
 
-⚠️ **CRITICAL RULE:** When a feature is COMPLETE and DEPLOYED, it MUST be properly documented and moved out of `docs/copilot-wip/`.
+⚠️ **CRITICAL RULE (ENFORCED):** When a feature is COMPLETE and DEPLOYED, it MUST be documented in `docs/implemented/` AND the plan file MUST be deleted from `docs/plans/`. This is NOT a suggestion—it is mandatory. Failure to complete this step leaves documentation in limbo and violates the project documentation standard.
 
-**Feature Completion Checklist:**
+**YOU (the AI) are responsible for:**
+1. ✅ Implementing the feature code
+2. ✅ Writing and passing all unit tests
+3. ✅ Validating code quality (Pylint ≥9.0/10)
+4. 🔴 **Creating BOTH technical + capabilities documentation** ← YOU MUST DO THIS
+5. 🔴 **Updating docs/implemented/README.md** ← YOU MUST DO THIS
+6. 🔴 **Deleting the plan file from docs/plans/** ← YOU MUST DO THIS
+7. 🔴 **Deleting all WIP tracking documents** ← YOU MUST DO THIS
+
+**If you don't do steps 4-7, the feature is NOT complete. Period.**
+
+**Feature Completion Checklist (DO NOT SKIP ANY STEP):**
 1. ✅ Implementation complete and all tests passing
 2. ✅ Feature deployed in production release (v1.x.x)
-3. ✅ Validated in real-world use (if applicable)
-4. ⚠️ **MANDATORY:** Create documentation in `docs/implemented/`
+3. ✅ Code quality validated (Pylint ≥9.0/10, all tests passing)
+4. 🔴 **MUST: Create `docs/implemented/feature-name-technical.md`**
+5. 🔴 **MUST: Create `docs/implemented/feature-name-capabilities.md`**
+6. 🔴 **MUST: Update `docs/implemented/README.md` with feature entry**
+7. 🔴 **MUST: Delete plan file from `docs/plans/feature-name-IMPLEMENTATION.md`**
+8. 🔴 **MUST: Delete all WIP tracking documents from `docs/copilot-wip/`**
 
-**Required Documentation (BOTH files required):**
+**DO NOT CONSIDER A FEATURE "DONE" UNTIL ALL STEPS 4-8 ARE COMPLETE.**
+
+**Required Documentation (BOTH files mandatory):**
 
 **A. Technical Document (`feature-name-technical.md`)**
 Template structure:
@@ -340,9 +395,10 @@ Template structure:
 # Feature Name - Technical Implementation
 
 **Component:** [Subsystem name]
-**Module:** app/[module].py
+**Modules:** app/[module1].py, app/[module2].py
 **Version:** [X.Y.Z]
 **Safety/Performance-Critical:** YES/NO
+**Status:** Implemented and tested (X/X tests passing, Pylint Y.YY/10)
 
 ## Overview
 [High-level architecture]
@@ -350,16 +406,25 @@ Template structure:
 ## Implementation
 [Code examples, algorithms, data structures]
 
-## Timing Analysis
-[Performance metrics, worst-case timing]
-
 ## Configuration
 [CVs, parameters, defaults]
 
 ## Testing
-[Test coverage, validation approach]
+[Test coverage %, test count, validation approach]
+
+## Timing Analysis
+[Performance metrics, worst-case timing]
 
 ## Known Limitations
+[Current constraints, future improvements]
+
+## Safety Considerations
+[What this protects, what it doesn't, guarantees]
+
+## Related Documentation
+[Links to capabilities doc, user guide, CV reference]
+```
+
 [Current constraints, future improvements]
 ```
 
@@ -392,65 +457,64 @@ Template structure:
 **For technical details, see:** [feature-name-technical.md](feature-name-technical.md)
 ```
 
-**C. Migration Steps:**
-1. Create both documents in `docs/implemented/`
-2. **Delete WIP documents** after extracting information into technical/capabilities docs
-   - ❌ DO NOT move WIP documents to docs/implemented/
-   - ❌ DO NOT keep verification/tracking documents
-   - ✅ DO extract information into proper technical/capabilities format
-3. Update `docs/implemented/README.md` with new feature entry
-4. Update user guides (CV.md, FUNCTIONS.md, capabilities.md) with cross-references
-5. Verify `docs/copilot-wip/` only contains ACTIVE work
+**C. Migration Steps (MANDATORY):**
+1. ✅ Create both technical.md AND capabilities.md in `docs/implemented/`
+2. ✅ Update `docs/implemented/README.md` with new feature entry (include version, status, links)
+3. ✅ Delete plan file from `docs/plans/` (rm docs/plans/FEATURE_NAME_IMPLEMENTATION.md)
+4. ✅ Delete all WIP tracking documents from `docs/copilot-wip/` (rm docs/copilot-wip/*.md)
+5. ✅ Verify docs are readable and complete
 
-**D. Example - Emergency Shutdown Feature:**
+**D. Example - Sensor Degradation Feature (v1.1.0):**
 ```bash
-# During development:
-docs/copilot-wip/EMERGENCY_SHUTDOWN_VERIFICATION.md  # WIP tracking
+# During implementation (hours):
+docs/copilot-wip/                               # Temporary progress tracking
+docs/plans/SENSOR_FAILURE_GRACEFUL_DEGRADATION.md  # Implementation plan
 
-# After completion (v1.0.0 release):
+# After completion (code deployed + tests passing):
 # 1. Create proper documentation:
-docs/implemented/emergency-shutdown-technical.md      # How it works
-docs/implemented/emergency-shutdown-capabilities.md   # What it does
-docs/implemented/README.md                            # Updated with entry
+docs/implemented/sensor-degradation-technical.md      # Architecture, algorithms, testing
+docs/implemented/sensor-degradation-capabilities.md   # User guide, examples, troubleshooting
+docs/implemented/README.md                            # Updated with feature entry
 
-# 2. Delete WIP documents (info extracted):
-rm docs/copilot-wip/EMERGENCY_SHUTDOWN_VERIFICATION.md
-rm docs/copilot-wip/PHASE*_COMPLETION.md
-rm docs/copilot-wip/SESSION_COMPLETION.md
+# 2. Delete temporary files:
+rm docs/plans/SENSOR_FAILURE_GRACEFUL_DEGRADATION.md
+rm docs/copilot-wip/*.md  # All WIP tracking documents
 
-# Final state - only 2 files per feature:
+# 3. Final state:
 docs/implemented/
-├── emergency-shutdown-technical.md
-├── emergency-shutdown-capabilities.md
-└── README.md
+├── sensor-degradation-technical.md
+├── sensor-degradation-capabilities.md
+├── [other-features-technical.md, other-features-capabilities.md]
+└── README.md  (updated with new feature)
 ```
 
-**Why This Matters:**
-- Prevents `docs/copilot-wip/` from becoming a graveyard of stale documents
-- Ensures every completed feature has proper user + developer documentation
-- Creates clear separation between active work and finished featureanywhere
-- Session completion reports (SESSION_COMPLETION.md) anywhere
-- Phase completion documents (PHASE*_COMPLETION.md) anywhere
-- Progress tracking documents in docs/implemented/
-- Duplicate documentation that belongs in existing files
+**ENFORCEMENT: If a feature has:**
+- ❌ Code implemented but no `docs/implemented/` docs → Feature is NOT complete
+- ❌ Plan file still in `docs/plans/` after implementation → Feature is NOT complete
+- ❌ WIP tracking documents still in `docs/copilot-wip/` after release → Feature is NOT complete
+- ✅ Both technical.md + capabilities.md in `docs/implemented/` → Feature is complete
+- ✅ Plan file deleted from `docs/plans/` → Feature is complete
+- ✅ `docs/implemented/README.md` updated with entry → Feature is complete
 
-**Where information belongs:**
-- Release information → CHANGELOG.md
-- Feature documentation → docs/implemented/feature-name-*.md (technical + capabilities)
-- Feature index → docs/implemented/README.md
-- Project status → README.md (badges and quick stats)
-- Active planning → docs/copilot-wip/ (temporary only)
+**Consequence of Incomplete Cleanup:**
+- Plan files accumulate in `docs/plans/` creating maintenance burden
+- Users confused about which features are actually deployed
+- WIP documents become orphaned and stale (users don't know if they're active)
+- Documentation becomes unreliable source of truth
+- Future developers can't tell what's done vs. what's in-progress
 
-**What to move to docs/implemented/:**
-- ✅ Feature-specific verification documents (e.g., EMERGENCY_SHUTDOWN_VERIFICATION.md)
-- ✅ Feature implementation designs (e.g., ESTOP_IMPLEMENTATION.md, NONBLOCKING_TELEMETRY.md)
-- ❌ Phase summaries (delete after extracting info to CHANGELOG.md)
-- ❌ Session reports (delete after extracting info to feature docs)
-- ❌ Progress tracking (delete after features documented
-- Feature documentation → docs/implemented/feature-name-*.md
-- Feature index → docs/implemented/README.md
-- Project status → README.md (badges and quick stats)
-- Phase completion tracking → docs/implemented/PHASE*_COMPLETION.md (historical WIP docs only)
+**YOUR RESPONSIBILITY:**
+- 🔴 DO NOT leave plan files in `docs/plans/` after implementation
+- 🔴 DO NOT leave WIP documents in `docs/copilot-wip/` after release
+- 🔴 DO NOT consider a feature "done" until ALL documentation steps complete
+- 🟢 DO create technical.md with architecture details
+- 🟢 DO create capabilities.md with user guide
+- 🟢 DO update docs/implemented/README.md
+- 🟢 DO delete plan file
+- 🟢 DO delete WIP documents
+- 🟢 DO verify `docs/` structure is clean
+
+**End of Feature Completion - Check yourself BEFORE committing work!**
 
 ---
 
@@ -466,3 +530,6 @@ Before deploying ANY code to the TinyPICO:
 - [ ] Emergency shutdown tested
 - [ ] BLE telemetry functional for remote monitoring
 - [ ] Memory usage profiled (gc.mem_free() > 10KB margin)
+- [ ] 🔴 **Feature documentation complete (technical.md + capabilities.md in docs/implemented/)**
+- [ ] 🔴 **Plan file deleted from docs/plans/**
+- [ ] 🔴 **WIP documents deleted from docs/copilot-wip/**

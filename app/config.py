@@ -55,7 +55,10 @@ CV_DEFAULTS = {
     "46": 77,        # Servo neutral PWM duty
     "47": 128,       # Servo max PWM duty
     "48": 5,         # Whistle offset (degrees)
-    "49": 1000       # Servo travel time (ms)
+    "49": 1000,      # Servo travel time (ms)
+    "84": 1,         # Enable Graceful Degradation (1=ON, 0=immediate shutdown)
+    "87": 10.0,      # Sensor Failure Decel Rate (cm/s²)
+    "88": 20,        # Degraded Mode Timeout (seconds)
 }
 
 def ensure_environment() -> None:

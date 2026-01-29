@@ -53,6 +53,19 @@ This directory contains documentation for **completed and deployed** features of
 
 ---
 
+### Sensor Failure Graceful Degradation
+**Status:** Production (v1.1.0)  
+**Safety-Critical:** YES
+
+- [sensor-degradation-technical.md](sensor-degradation-technical.md) - Sensor health tracking, 3-state watchdog (NOMINAL/DEGRADED/CRITICAL), linear deceleration algorithm, CV configuration
+- [sensor-degradation-capabilities.md](sensor-degradation-capabilities.md) - Single sensor failure handling, automatic speed reduction, distress signal, troubleshooting guide
+
+**What it does:** When a sensor fails (disconnected, out-of-range), system smoothly decelerates locomotive over 10-20 seconds instead of emergency stop. Gives operators time to react, prevents derailment of loaded consists. Uses CV84 (enable/disable), CV87 (decel rate), CV88 (timeout).
+
+**Key Improvement:** Transient glitches handled gracefully via sensor value caching. Single sensor failure enters DEGRADED mode with controlled slowdown. Multiple simultaneous failures trigger immediate emergency shutdown for maximum safety.
+
+---
+
 ### Safety-First Watchdog Logic
 **Status:** Production (v1.0.0)  
 **Safety-Critical:** YES

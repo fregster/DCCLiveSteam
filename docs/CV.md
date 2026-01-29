@@ -19,3 +19,6 @@ CV,Parameter,Default,Unit,Description
 47,Servo Max,128,Duty,PWM duty cycle for fully open regulator (90°).
 48,Whistle Offset,5,Deg,Degrees from neutral to trigger whistle blow-off.
 49,Travel Time,1000,ms,Time to sweep from 0% to 100% regulator open.
+84,Graceful Degradation,1,Bool,"1 = Smooth deceleration on sensor failure; 0 = Immediate shutdown."
+87,Decel Rate,10.0,cm/s²,Speed of controlled deceleration during sensor failure graceful shutdown.
+88,Degraded Timeout,20,s,Maximum time allowed in degraded mode before forced shutdown.

@@ -202,7 +202,10 @@ def test_cv_defaults_match_documentation():
         "46": "Servo Neutral",
         "47": "Servo Max",
         "48": "Whistle Offset",
-        "49": "Travel Time"
+        "49": "Travel Time",
+        "84": "Graceful Degradation",
+        "87": "Decel Rate",
+        "88": "Degraded Timeout"
     }
     
     # Verify each documented CV has a default

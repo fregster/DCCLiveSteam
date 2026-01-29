@@ -1,46 +1,111 @@
-# Copilot Work-In-Progress
+# Copilot Work-In-Progress (WIP)
 
-This folder contains **active development tracking documents**. These are **not user-facing documents**—they track ongoing work during development sessions.
+**⚠️ CRITICAL:** This folder is **EXCLUSIVELY for temporary session documents** while Copilot is actively working on features. **All permanent planning and implementation documents belong in `docs/plans/`.**
 
-**⚠️ Important:** Once features are complete and deployed, their documentation should be moved to `docs/implemented/` with proper technical and capabilities documents.
+This folder contains **active development tracking documents only**. These are **NOT user-facing documents**—they track ongoing work during development sessions and are deleted when work completes.
+
+---
+
+## Folder Purpose & Lifecycle
+
+### ✅ What BELONGS in `docs/copilot-wip/`
+- **Session notes** - Temporary tracking during active development
+- **Progress tracking** - "Currently working on X", "Need to fix Y"
+- **Debug logs** - Temporary troubleshooting documents
+- **Verification documents** - Phase completion checklists for current session
+- **Short-term planning** - Notes being actively refined in current session
+
+**Lifespan:** 1 working session (hours to days). **Deleted when feature complete.**
+
+### ❌ What Does NOT Belong in `docs/copilot-wip/`
+- **Implementation plans** → `docs/plans/` (multi-phase designs, technical architecture)
+- **Feature designs** → `docs/plans/` (detailed specifications, testing strategies)
+- **Architectural decisions** → `docs/plans/` (system design, CV specifications)
+- **Session summaries** → Extract to feature docs, then delete
+- **Phase completion reports** → Extract to CHANGELOG.md, then delete
+
+### Where Documents GO After Active Development Completes
+
+1. **Implementation Plans** (multi-phase designs)
+   - Created in WIP during planning
+   - **MOVE to `docs/plans/`** immediately after planning complete
+   - Rationale: Plans are forward-looking, meant to guide development
+   
+2. **Completed Features** (after development + deployment)
+   - Implementation moved to codebase (app/ directory)
+   - **CREATE in `docs/implemented/`**: feature-name-technical.md + feature-name-capabilities.md
+   - **DELETE from WIP**: All session notes, verification docs, progress tracking
+   - Rationale: Completed features documented for users and maintainers
+
+---
+
+## Document Routing Decision Tree
+
+```
+New document needed?
+    ↓
+Is it a **multi-phase implementation plan** 
+or **architectural design**?
+    ├─ YES → `docs/plans/` (permanent)
+    ├─ NO → Continue...
+    ↓
+Is it **temporary session tracking** 
+(notes, progress, debug)?
+    ├─ YES → `docs/copilot-wip/` (delete when done)
+    ├─ NO → Continue...
+    ↓
+Is it a **completed and deployed feature**?
+    ├─ YES → `docs/implemented/` (permanent)
+    ├─ NO → Continue...
+    ↓
+Is it **user-facing documentation** 
+(CV reference, capabilities, troubleshooting)?
+    └─ YES → `docs/` root level (permanent)
+```
 
 ---
 
 ## Current Contents
 
-### Active Planning Documents
-- **TODO_IMPROVEMENTS.md** - Pending improvement tasks and future work
+### Active Session Documents (Temporary)
+*Empty - no active development in progress*
 
 ---
 
-## Document Lifecycle
+## Document Lifecycle (Complete Flowchart)
 
-### 1. Active Development (HERE)
-- Documents created during feature development
-- Progress tracking and session notes
-- Planning documents for future features
+### Phase 1: Initial Planning (Active, in WIP)
+```
+Session starts → Create implementation plan → Refine daily
+↓ (When plan complete)
+MOVE to docs/plans/ (permanent forward-looking reference)
+DELETE from WIP (no longer active session doc)
+```
 
-### 2. Feature Completion → Move to `docs/implemented/`
-When a feature is complete:
-1. ✅ Implementation merged and tested
-2. ✅ All unit tests passing
-3. ✅ Feature deployed in release
-4. ⚠️ **MUST:** Create two new documents in `docs/implemented/`:
-   - `feature-name-technical.md` - How it works (architecture, code, testing)
-   - `feature-name-capabilities.md` - What it does (user guide, examples, troubleshooting)
-5. ⚠️ **MUST:** Move WIP document from here to `docs/implemented/` for historical reference
-6. ⚠️ **MUST:** Update `docs/implemented/README.md` with new feature entry
+### Phase 2: Active Development (Active, in WIP)
+```
+Development session → Create session notes/progress tracking
+↓ (Multiple sessions)
+Update WIP documents daily during development
+↓ (When feature complete)
+DELETE WIP documents (extract info to code comments & tests)
+```
 
-### 3. Historical Reference (`docs/implemented/`)
-- Completed feature documentation
-- Technical implementation details
-- User-facing capabilities guides
+### Phase 3: Feature Complete (Move to Implemented)
+```
+Code merged ✅
+All tests passing ✅
+Deployed to release ✅
+    ↓
+Create `feature-name-technical.md` → `docs/implemented/`
+Create `feature-name-capabilities.md` → `docs/implemented/`
+Update `docs/implemented/README.md`
+DELETE all WIP documents
+```
 
 ---
 
-## Completed Features Documented
-
-The following features have been properly documented in `docs/implemented/`:
+## Completed Features Documented (in `docs/implemented/`)
 
 **Emergency Shutdown System:**
 - ✅ emergency-shutdown-technical.md
