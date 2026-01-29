@@ -15,13 +15,25 @@ import time
 
 
 class SerialPrintQueue:
-    """Non-blocking queue for USB serial output.
+    """
+    Non-blocking queue for USB serial output.
 
-    Why: print() can block for 2-5ms on USB serial. Queuing messages and writing
-    in background keeps main loop timing predictable.
+    Why:
+        print() can block for 2-5ms on USB serial. Queuing messages and writing
+        in background keeps main loop timing predictable.
 
-    Safety: Queue size limited to 10 messages. If full, oldest messages dropped
-    (telemetry is not safety-critical). Non-blocking enqueue/dequeue operations.
+    Args:
+        max_size: Maximum messages to buffer (default 10)
+
+    Returns:
+        None
+
+    Raises:
+        None
+
+    Safety:
+        Queue size limited to 10 messages. If full, oldest messages dropped
+        (telemetry is not safety-critical). Non-blocking enqueue/dequeue operations.
 
     Example:
         >>> queue = SerialPrintQueue()
@@ -30,24 +42,49 @@ class SerialPrintQueue:
     """
 
     def __init__(self, max_size: int = 10) -> None:
-        """Initialize serial print queue.
+        """
+        Initialize serial print queue.
+
+        Why:
+            Sets up a bounded queue for non-blocking USB serial output.
 
         Args:
             max_size: Maximum messages to buffer (default 10)
 
-        Safety: Limited queue prevents memory exhaustion from print spam.
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Limited queue prevents memory exhaustion from print spam.
+
+        Example:
+            >>> queue = SerialPrintQueue()
         """
         self._queue: deque = deque((), max_size)
         self._last_print_time = time.ticks_ms()
         self._min_interval_ms = 50  # Minimum 50ms between prints
 
     def enqueue(self, message: str) -> None:
-        """Add message to print queue (non-blocking).
+        """
+        Add message to print queue (non-blocking).
+
+        Why:
+            Allows main loop to queue messages for later printing without blocking.
 
         Args:
             message: String to print to USB serial
 
-        Safety: If queue full, oldest message dropped. Non-blocking always.
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            If queue full, oldest message dropped. Non-blocking always.
 
         Example:
             >>> queue.enqueue("PSI: 45.2")
@@ -58,12 +95,24 @@ class SerialPrintQueue:
             pass  # Queue full, drop message (non-critical telemetry)
 
     def process(self) -> None:
-        """Print one queued message if enough time elapsed.
+        """
+        Print one queued message if enough time elapsed.
 
-        Why: Rate-limited to prevent USB serial saturation. Processes one message
-        per call to maintain <1ms processing time.
+        Why:
+            Rate-limited to prevent USB serial saturation. Processes one message
+            per call to maintain <1ms processing time.
 
-        Safety: Non-blocking, max 1ms execution time. Failed prints silently dropped.
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Non-blocking, max 1ms execution time. Failed prints silently dropped.
 
         Example:
             >>> queue.process()  # Call from main loop
@@ -85,13 +134,25 @@ class SerialPrintQueue:
 
 
 class FileWriteQueue:
-    """Non-blocking queue for file write operations.
+    """
+    Non-blocking queue for file write operations.
 
-    Why: JSON file writes (config.json, error_log.json) block for 10-50ms.
-    Queuing writes allows main loop to continue without waiting for flash I/O.
+    Why:
+        JSON file writes (config.json, error_log.json) block for 10-50ms.
+        Queuing writes allows main loop to continue without waiting for flash I/O.
 
-    Safety: Queue size limited to 5 writes. Critical writes (emergency logs) take
-    priority over routine writes (CV updates). Write failures logged but don't crash.
+    Args:
+        max_size: Maximum pending writes (default 5)
+
+    Returns:
+        None
+
+    Raises:
+        None
+
+    Safety:
+        Queue size limited to 5 writes. Critical writes (emergency logs) take
+        priority over routine writes (CV updates). Write failures logged but don't crash.
 
     Example:
         >>> queue = FileWriteQueue()
@@ -100,13 +161,27 @@ class FileWriteQueue:
     """
 
     def __init__(self, max_size: int = 5) -> None:
-        """Initialize file write queue.
+        """
+        Initialize file write queue.
+
+        Why:
+            Sets up a bounded queue for non-blocking file writes.
 
         Args:
             max_size: Maximum pending writes (default 5)
 
-        Safety: Limited queue prevents memory exhaustion. Priority queue ensures
-        emergency logs written before routine CV updates.
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Limited queue prevents memory exhaustion. Priority queue ensures
+            emergency logs written before routine CV updates.
+
+        Example:
+            >>> queue = FileWriteQueue()
         """
         self._queue: List[tuple] = []
         self._max_size = max_size
@@ -114,14 +189,25 @@ class FileWriteQueue:
         self._min_interval_ms = 100  # Minimum 100ms between writes
 
     def enqueue_write(self, filepath: str, content: str, priority: bool = False) -> None:
-        """Queue a file write operation.
+        """
+        Queue a file write operation.
+
+        Why:
+            Allows main loop to queue file writes for later execution without blocking.
 
         Args:
             filepath: Path to file (e.g., "config.json")
             content: String content to write
             priority: True for emergency logs (front of queue), False for routine
 
-        Safety: If queue full, drops lowest-priority write. Non-blocking always.
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            If queue full, drops lowest-priority write. Non-blocking always.
 
         Example:
             >>> queue.enqueue_write("error_log.json", '{"err": "THERMAL"}', priority=True)
@@ -144,13 +230,25 @@ class FileWriteQueue:
             self._queue.append(entry)
 
     def process(self) -> None:
-        """Write one queued file if enough time elapsed.
+        """
+        Write one queued file if enough time elapsed.
 
-        Why: Rate-limited to prevent flash wear and I/O congestion. Processes one
-        write per call to maintain <50ms worst-case time.
+        Why:
+            Rate-limited to prevent flash wear and I/O congestion. Processes one
+            write per call to maintain <50ms worst-case time.
 
-        Safety: Non-blocking enqueue, blocking write (but only when called). Failed
-        writes silently dropped (file I/O is not safety-critical for control loop).
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Non-blocking enqueue, blocking write (but only when called). Failed
+            writes silently dropped (file I/O is not safety-critical for control loop).
 
         Example:
             >>> queue.process()  # Call from main loop
@@ -173,14 +271,26 @@ class FileWriteQueue:
 
 
 class GarbageCollector:
-    """Scheduled garbage collection to prevent OOM.
+    """
+    Scheduled garbage collection to prevent OOM.
 
-    Why: Running gc.collect() in main loop when heap low adds unpredictable latency
-    spikes (10-50ms). Scheduled GC during idle periods keeps heap healthy without
-    affecting control timing.
+    Why:
+        Running gc.collect() in main loop when heap low adds unpredictable latency
+        spikes (10-50ms). Scheduled GC during idle periods keeps heap healthy without
+        affecting control timing.
 
-    Safety: GC runs max once per second. If heap critically low (<5KB), forces
-    immediate collection to prevent OOM crash.
+    Args:
+        threshold_kb: Run GC when free memory below this (default 60KB)
+
+    Returns:
+        None
+
+    Raises:
+        None
+
+    Safety:
+        GC runs max once per second. If heap critically low (<5KB), forces
+        immediate collection to prevent OOM crash.
 
     Example:
         >>> gc_mgr = GarbageCollector(threshold_kb=60)
@@ -188,12 +298,26 @@ class GarbageCollector:
     """
 
     def __init__(self, threshold_kb: int = 60) -> None:
-        """Initialize garbage collector.
+        """
+        Initialize garbage collector.
+
+        Why:
+            Sets up thresholds and timers for scheduled garbage collection.
 
         Args:
             threshold_kb: Run GC when free memory below this (default 60KB)
 
-        Safety: Conservative threshold triggers GC before critical low memory.
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Conservative threshold triggers GC before critical low memory.
+
+        Example:
+            >>> gc_mgr = GarbageCollector(threshold_kb=60)
         """
         self._threshold_bytes = threshold_kb * 1024
         self._last_gc_time = time.ticks_ms()
@@ -201,13 +325,25 @@ class GarbageCollector:
         self._critical_threshold_bytes = 5 * 1024  # 5KB critical
 
     def process(self) -> None:
-        """Run garbage collection if needed.
+        """
+        Run garbage collection if needed.
 
-        Why: Scheduled GC prevents unpredictable latency spikes in control loop.
-        Only runs if (a) heap below threshold AND (b) enough time since last GC.
+        Why:
+            Scheduled GC prevents unpredictable latency spikes in control loop.
+            Only runs if (a) heap below threshold AND (b) enough time since last GC.
 
-        Safety: Critical low memory (<5KB) forces immediate GC regardless of timing
-        to prevent OOM crash.
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Critical low memory (<5KB) forces immediate GC regardless of timing
+            to prevent OOM crash.
 
         Example:
             >>> gc_mgr.process()  # Call from main loop
@@ -235,19 +371,26 @@ class GarbageCollector:
 
 
 class CachedSensorReader:
-    """Cached sensor readings updated in background.
+    """
+    Cached sensor readings updated in background.
 
-    Why: ADC reads with oversampling take ~30ms (10 samples × 3ms each). Caching
-    last-good values and updating asynchronously keeps main loop fast while still
-    getting fresh sensor data.
+    Why:
+        ADC reads with oversampling take ~30ms (10 samples × 3ms each). Caching
+        last-good values and updating asynchronously keeps main loop fast while still
+        getting fresh sensor data.
 
-    Strategy:
-    - Main loop reads cached values (<1ms)
-    - Background task updates cache when stale (>100ms old)
-    - Failed reads use last-valid value (graceful degradation)
+    Args:
+        sensor_suite: SensorSuite instance to wrap
 
-    Safety: Cache never older than 200ms (meets watchdog 50Hz requirement). Failed
-    sensor reads don't block main loop. Watchdog still monitors cached values.
+    Returns:
+        None
+
+    Raises:
+        None
+
+    Safety:
+        Cache never older than 200ms (meets watchdog 50Hz requirement). Failed
+        sensor reads don't block main loop. Watchdog still monitors cached values.
 
     Example:
         >>> reader = CachedSensorReader(sensor_suite)
@@ -256,12 +399,26 @@ class CachedSensorReader:
     """
 
     def __init__(self, sensor_suite: Any) -> None:
-        """Initialize cached sensor reader.
+        """
+        Initialize cached sensor reader.
+
+        Why:
+            Sets up cache and links to sensor suite for background updates.
 
         Args:
             sensor_suite: SensorSuite instance to wrap
 
-        Safety: Cache initialized with safe defaults (ambient temp, no pressure).
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Cache initialized with safe defaults (ambient temp, no pressure).
+
+        Example:
+            >>> reader = CachedSensorReader(sensor_suite)
         """
         self._sensors = sensor_suite
         self._cached_temps = (25.0, 25.0, 25.0)  # (boiler, super, logic)
@@ -271,12 +428,23 @@ class CachedSensorReader:
         self._max_cache_age_ms = 100  # Refresh if older than 100ms
 
     def get_temps(self) -> tuple:
-        """Get cached temperature readings (non-blocking).
+        """
+        Get cached temperature readings (non-blocking).
+
+        Why:
+            Allows main loop to access latest temperature readings instantly.
+
+        Args:
+            None
 
         Returns:
             Tuple of (boiler_temp, super_temp, logic_temp) in Celsius
 
-        Safety: Always returns immediately. Cache refreshed in background.
+        Raises:
+            None
+
+        Safety:
+            Always returns immediately. Cache refreshed in background.
 
         Example:
             >>> temps = reader.get_temps()
@@ -286,33 +454,73 @@ class CachedSensorReader:
         return self._cached_temps
 
     def get_pressure(self) -> float:
-        """Get cached pressure reading (non-blocking).
+        """
+        Get cached pressure reading (non-blocking).
+
+        Why:
+            Allows main loop to access latest pressure reading instantly.
+
+        Args:
+            None
 
         Returns:
             Pressure in PSI (0-100)
 
-        Safety: Always returns immediately.
+        Raises:
+            None
+
+        Safety:
+            Always returns immediately.
+
+        Example:
+            >>> p = reader.get_pressure()
         """
         return self._cached_pressure
 
     def get_track_voltage(self) -> float:
-        """Get cached track voltage (non-blocking).
+        """
+        Get cached track voltage (non-blocking).
+
+        Why:
+            Allows main loop to access latest track voltage instantly.
+
+        Args:
+            None
 
         Returns:
             Track voltage in volts (0-18V)
 
-        Safety: Always returns immediately.
+        Raises:
+            None
+
+        Safety:
+            Always returns immediately.
+
+        Example:
+            >>> v = reader.get_track_voltage()
         """
         return self._cached_track_v
 
     def update_cache(self) -> None:
-        """Refresh sensor cache if stale.
+        """
+        Refresh sensor cache if stale.
 
-        Why: Only reads sensors if cache older than 100ms. Prevents unnecessary
-        ADC operations while ensuring data stays fresh.
+        Why:
+            Only reads sensors if cache older than 100ms. Prevents unnecessary
+            ADC operations while ensuring data stays fresh.
 
-        Safety: Failed sensor reads keep last-valid values. Non-blocking check,
-        blocking read (only when called explicitly from background).
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Failed sensor reads keep last-valid values. Non-blocking check,
+            blocking read (only when called explicitly from background).
 
         Example:
             >>> reader.update_cache()  # Call periodically from main loop
@@ -335,13 +543,25 @@ class CachedSensorReader:
 
 
 class EncoderTracker:
-    """Interrupt-driven encoder tracking with velocity calculation.
+    """
+    Interrupt-driven encoder tracking with velocity calculation.
 
-    Why: Polling encoder in main loop adds latency. IRQ-based tracking captures every
-    edge, calculates velocity in background, main loop just reads cached value.
+    Why:
+        Polling encoder in main loop adds latency. IRQ-based tracking captures every
+        edge, calculates velocity in background, main loop just reads cached value.
 
-    Safety: Velocity calculated from time delta, not just count delta (handles
-    variable loop timing). Cache never stale (IRQ updates continuously).
+    Args:
+        pin_encoder: Encoder GPIO pin (must support IRQ)
+
+    Returns:
+        None
+
+    Raises:
+        None
+
+    Safety:
+        Velocity calculated from time delta, not just count delta (handles
+        variable loop timing). Cache never stale (IRQ updates continuously).
 
     Example:
         >>> tracker = EncoderTracker(pin=14)
@@ -349,12 +569,26 @@ class EncoderTracker:
     """
 
     def __init__(self, pin_encoder: Any) -> None:
-        """Initialize encoder tracker with IRQ.
+        """
+        Initialize encoder tracker with IRQ.
+
+        Why:
+            Sets up IRQ handler and state for encoder tracking.
 
         Args:
             pin_encoder: Encoder GPIO pin (must support IRQ)
 
-        Safety: IRQ handler keeps count, velocity calculation non-blocking.
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            IRQ handler keeps count, velocity calculation non-blocking.
+
+        Example:
+            >>> tracker = EncoderTracker(pin=14)
         """
         self._encoder_pin = pin_encoder
         self._count = 0
@@ -369,21 +603,48 @@ class EncoderTracker:
             pass  # IRQ setup failed, will fall back to polling
 
     def _irq_handler(self, pin: Any) -> None:
-        """IRQ callback on encoder edge.
+        """
+        IRQ callback on encoder edge.
 
-        Why: Runs in interrupt context, must be fast (<10μs). Just increments counter.
+        Why:
+            Runs in interrupt context, must be fast (<10μs). Just increments counter.
 
-        Safety: No allocations, no blocking calls. Thread-safe counter increment.
+        Args:
+            pin: Pin object that triggered the IRQ
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            No allocations, no blocking calls. Thread-safe counter increment.
+
+        Example:
+            >>> # Called by hardware IRQ
         """
         self._count += 1
 
     def update_velocity(self) -> None:
-        """Calculate velocity from encoder delta (call from main loop).
+        """
+        Calculate velocity from encoder delta (call from main loop).
 
-        Why: Velocity calculation (division, time delta) too slow for IRQ. Main loop
-        calls this periodically to update cached velocity.
+        Why:
+            Velocity calculation (division, time delta) too slow for IRQ. Main loop
+            calls this periodically to update cached velocity.
 
-        Safety: Non-blocking read of IRQ counter. Division-by-zero protection.
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Non-blocking read of IRQ counter. Division-by-zero protection.
 
         Example:
             >>> tracker.update_velocity()  # Call every loop iteration
@@ -404,12 +665,23 @@ class EncoderTracker:
             self._last_time = now
 
     def get_velocity_cms(self) -> float:
-        """Get cached velocity calculation (non-blocking).
+        """
+        Get cached velocity calculation (non-blocking).
+
+        Why:
+            Allows main loop to access latest velocity instantly.
+
+        Args:
+            None
 
         Returns:
             Velocity in cm/s
 
-        Safety: Always returns immediately.
+        Raises:
+            None
+
+        Safety:
+            Always returns immediately.
 
         Example:
             >>> velocity = tracker.get_velocity_cms()
@@ -419,11 +691,25 @@ class EncoderTracker:
         return self._cached_velocity_cms
 
     def get_count(self) -> int:
-        """Get raw encoder count.
+        """
+        Get raw encoder count.
+
+        Why: Provides access to the total number of encoder pulses for velocity and distance calculations.
+
+        Args:
+            None
 
         Returns:
-            Total encoder pulses since boot
+            int: Total encoder pulses since boot
+
+        Raises:
+            None
 
         Safety: Non-blocking read.
+
+        Example:
+            >>> enc = EncoderTask(...)
+            >>> enc.get_count()
+            12345
         """
         return self._count

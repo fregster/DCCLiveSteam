@@ -16,18 +16,23 @@ class DegradedModeController:
     """
     Manages controlled speed reduction during sensor failure.
 
-    Why: When a sensor fails, abrupt stop can derail heavy loaded consists. This class
-    implements smooth deceleration at a configurable rate (CV87), giving operators
-    reaction time and trains time to settle on grades.
+    Why:
+        When a sensor fails, abrupt stop can derail heavy loaded consists. This class
+        implements smooth deceleration at a configurable rate (CV87), giving operators
+        reaction time and trains time to settle on grades.
 
-    Strategy:
-        - Calculate deceleration profile based on CV87 (cm/s²)
-        - Reduce speed linearly from current value to zero
-        - Complete reduction in 10-15 seconds (user configurable)
-        - Then trigger standard shutdown
+    Args:
+        cv: CV configuration table with CV87 (deceleration rate in cm/s²)
 
-    Safety: Linear deceleration at constant rate prevents jerky motion that could derail.
-    Speed never goes negative. Non-blocking calculations fit in 20ms control budget.
+    Returns:
+        None
+
+    Raises:
+        None
+
+    Safety:
+        Linear deceleration at constant rate prevents jerky motion that could derail.
+        Speed never goes negative. Non-blocking calculations fit in 20ms control budget.
 
     Example:
         >>> controller = DegradedModeController(cv_table)
@@ -38,12 +43,24 @@ class DegradedModeController:
     """
 
     def __init__(self, cv: Dict[int, Any]) -> None:
-        """Initialise degraded mode controller.
+        """
+        Initialise degraded mode controller.
+
+        Why: Sets up deceleration rate and state for smooth speed reduction on sensor failure.
 
         Args:
-            cv: CV configuration table with CV87 (deceleration rate in cm/s²)
+            cv (Dict[int, Any]): CV configuration table with CV87 (deceleration rate in cm/s²)
+
+        Returns:
+            None
+
+        Raises:
+            None
 
         Safety: All parameters conservative defaults to prevent dangerous acceleration.
+
+        Example:
+            >>> controller = DegradedModeController({'87': 10.0})
         """
         self.cv = cv
         self.degraded_decel_rate_cms2 = float(cv.get(87, 10.0))  # cm/s² (CV87)
@@ -55,8 +72,16 @@ class DegradedModeController:
         """
         Begin controlled deceleration.
 
+        Why: Initiates smooth speed reduction to prevent abrupt stops on sensor failure.
+
         Args:
-            current_speed_cms: Current locomotive speed in cm/s
+            current_speed_cms (float): Current locomotive speed in cm/s
+
+        Returns:
+            None
+
+        Raises:
+            None
 
         Safety: Non-blocking, called once when failure detected.
                 Stores start time and speed, doesn't modify control loop.
@@ -74,11 +99,17 @@ class DegradedModeController:
         """
         Calculate next speed command during deceleration.
 
+        Why: Prevents abrupt stop, allows train dynamics to settle. Heavy consists
+        on grades won't derail.
+
+        Args:
+            None
+
         Returns:
             float: New speed command in cm/s (decreases toward zero)
 
-        Why: Prevents abrupt stop, allows train dynamics to settle. Heavy consists
-        on grades won't derail.
+        Raises:
+            None
 
         Safety: Linear deceleration at constant rate. Speed never goes negative.
         Calculation: new_speed = initial_speed - (decel_rate × elapsed_time)
@@ -105,8 +136,16 @@ class DegradedModeController:
         """
         Returns True if speed reduction complete (speed ≈ 0).
 
+        Why: Indicates when deceleration is finished and train is stopped.
+
+        Args:
+            None
+
         Returns:
             bool: True when deceleration finished
+
+        Raises:
+            None
 
         Safety: Uses 0.1 cm/s threshold (effectively zero for scale locomotives).
 
@@ -119,18 +158,30 @@ class DegradedModeController:
         return self.is_decelerating and self.update_speed_command() <= 0.1
 
 class Watchdog:
-    """Monitors CV-defined thermal and signal thresholds.
+    """
+    Monitors CV-defined thermal and signal thresholds.
 
-    Why: Five independent safety vectors (logic temp, boiler temp, superheater temp,
-    track voltage, DCC signal) prevent single-point failures. Each has CV-configurable
-    threshold and timeout. Graceful degradation mode allows one sensor failure without
-    immediate shutdown—operator has time to respond and train can decelerate safely.
+    Why:
+        Five independent safety vectors (logic temp, boiler temp, superheater temp,
+        track voltage, DCC signal) prevent single-point failures. Each has CV-configurable
+        threshold and timeout. Graceful degradation mode allows one sensor failure without
+        immediate shutdown—operator has time to respond and train can decelerate safely.
 
-    Safety: Watchdog initialised with current time for power/DCC timers to prevent
-    false triggers during first loop iteration after boot. Supports three modes:
-    - NOMINAL: All systems healthy
-    - DEGRADED: Single sensor failed, smooth deceleration in progress
-    - CRITICAL: Multiple sensor failures or timeout expired
+    Args:
+        None
+
+    Returns:
+        None
+
+    Raises:
+        None
+
+    Safety:
+        Watchdog initialised with current time for power/DCC timers to prevent
+        false triggers during first loop iteration after boot. Supports three modes:
+        - NOMINAL: All systems healthy
+        - DEGRADED: Single sensor failed, smooth deceleration in progress
+        - CRITICAL: Multiple sensor failures or timeout expired
 
     Example:
         >>> watchdog = Watchdog()
@@ -139,11 +190,21 @@ class Watchdog:
         "NOMINAL"
     """
     def __init__(self) -> None:
-        """Initialise watchdog timers and degradation state.
+        """
+        Initialise watchdog timers and degradation state.
 
         Why: Power and DCC timers track time since last valid reading. Initialised to
         current time to prevent false timeout during startup. Degradation state tracks
         sensor failures for graceful shutdown rather than immediate E-STOP.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
 
         Safety: Prevents spurious shutdown on first loop iteration where sensors may
         not have valid data yet. Shutdown guard prevents multiple die() calls during
@@ -172,8 +233,14 @@ class Watchdog:
         shutdown.
 
         Args:
-            sensors: SensorSuite instance with health tracking (failed_sensor_count, failure_reason)
-            cv: CV configuration table with CV88 (degraded timeout in seconds)
+            sensors (Any): SensorSuite instance with health tracking (failed_sensor_count, failure_reason)
+            cv (Dict[int, Any]): CV configuration table with CV88 (degraded timeout in seconds)
+
+        Returns:
+            None
+
+        Raises:
+            None
 
         Safety:
             - Single sensor failure → DEGRADED mode (speed reduction via controlled deceleration)
@@ -221,8 +288,16 @@ class Watchdog:
         """
         Returns current watchdog mode.
 
+        Why: Indicates current safety state for main loop and telemetry.
+
+        Args:
+            None
+
         Returns:
             str: "NOMINAL", "DEGRADED", or "CRITICAL"
+
+        Raises:
+            None
 
         Safety: Read-only, doesn't modify state.
 
@@ -233,11 +308,49 @@ class Watchdog:
         return self.mode
 
     def is_degraded(self) -> bool:
-        """Returns True if watchdog is in DEGRADED mode."""
+        """
+        Returns True if watchdog is in DEGRADED mode.
+
+        Why: Used by main loop to trigger degraded mode behaviour.
+
+        Args:
+            None
+
+        Returns:
+            bool: True if in DEGRADED mode, False otherwise
+
+        Raises:
+            None
+
+        Safety: Read-only, does not affect state.
+
+        Example:
+            >>> watchdog.is_degraded()
+            False
+        """
         return self.mode == "DEGRADED"
 
     def is_critical(self) -> bool:
-        """Returns True if watchdog is in CRITICAL mode (multiple sensor failures)."""
+        """
+        Returns True if watchdog is in CRITICAL mode (multiple sensor failures).
+
+        Why: Used by main loop to trigger emergency shutdown.
+
+        Args:
+            None
+
+        Returns:
+            bool: True if in CRITICAL mode, False otherwise
+
+        Raises:
+            None
+
+        Safety: Read-only, does not affect state.
+
+        Example:
+            >>> watchdog.is_critical()
+            False
+        """
         return self.mode == "CRITICAL"
 
     def check(self, t_logic: float, t_boiler: float, t_super: float,

@@ -23,6 +23,9 @@ PIN_DCC    = 14
 PIN_ENCODER = 32
 PIN_PRESSURE = 34
 PIN_LOGIC_TEMP = 35
+# LED pin assignments (update to match hardware wiring)
+PIN_FIREBOX_LED = 12  # Example GPIO for firebox LED
+PIN_GREEN_LED = 13    # Example GPIO for green status LED
 
 # DCC Timing Constants (microseconds)
 DCC_ONE_MIN = 52
@@ -65,8 +68,12 @@ def ensure_environment() -> None:
     """
     Checks for existence of config and logs; creates defaults if missing.
 
-    Why: On first boot or after flash erase, the system needs valid configuration
-         files to operate safely. Auto-provisioning prevents startup failures.
+    Why:
+        Ensures the system always has valid configuration and error log files on boot.
+        Prevents startup failures due to missing files after flash erase or first boot.
+
+    Args:
+        None
 
     Returns:
         None
@@ -74,8 +81,9 @@ def ensure_environment() -> None:
     Raises:
         OSError: If filesystem is read-only or corrupted
 
-    Safety: Creates factory defaults with conservative safety limits. System cannot
-            operate without valid CV table.
+    Safety:
+        Creates factory defaults with conservative safety limits. System cannot
+        operate without valid CV table. Prevents unsafe operation due to missing config.
 
     Example:
         >>> ensure_environment()
@@ -94,8 +102,12 @@ def load_cvs() -> Dict[int, any]:
     """
     Loads CVs into a dictionary with integer keys.
 
-    Why: Configuration Variables (CVs) are stored as JSON strings but accessed
-         by integer indices throughout the code. Conversion happens once at load.
+    Why:
+        Configuration Variables (CVs) are stored as JSON strings but accessed
+        by integer indices throughout the code. Conversion happens once at load.
+
+    Args:
+        None
 
     Returns:
         Dictionary with integer keys (CV numbers) and values (CV settings)
@@ -104,8 +116,9 @@ def load_cvs() -> Dict[int, any]:
         FileNotFoundError: If config.json doesn't exist (call ensure_environment first)
         json.JSONDecodeError: If config file is corrupted
 
-    Safety: Missing or corrupted config file will prevent system startup,
-            forcing recreation of safe defaults.
+    Safety:
+        Missing or corrupted config file will prevent system startup,
+        forcing recreation of safe defaults.
 
     Example:
         >>> cv = load_cvs()

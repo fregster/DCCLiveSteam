@@ -1,3 +1,135 @@
+from app.actuators import GreenStatusLED
+
+def test_green_led_boot_flash(monkeypatch):
+    pin = Mock()
+    pwm = Mock()
+    led = GreenStatusLED(pin, pwm=pwm)
+    led.boot_flash()
+    base = time.ticks_ms()
+    # Even 0.5s intervals: ON, odd: OFF
+    monkeypatch.setattr(time, 'ticks_ms', lambda: base)
+    led.update()
+    assert (1023,) in [call.args for call in pwm.duty.call_args_list]
+    pwm.duty.reset_mock()
+    monkeypatch.setattr(time, 'ticks_ms', lambda: base + 501)
+    led.update()
+    assert (0,) in [call.args for call in pwm.duty.call_args_list]
+
+def test_green_led_solid():
+    pin = Mock()
+    pwm = Mock()
+    led = GreenStatusLED(pin, pwm=pwm)
+    led.solid()
+    led.update()
+    assert (1023,) in [call.args for call in pwm.duty.call_args_list]
+
+def test_green_led_dcc_blink(monkeypatch):
+    pin = Mock()
+    pwm = Mock()
+    led = GreenStatusLED(pin, pwm=pwm)
+    led.solid()
+    led.dcc_blink()
+    base = time.ticks_ms()
+    monkeypatch.setattr(time, 'ticks_ms', lambda: base)
+    led.update()
+    assert (1023,) in [call.args for call in pwm.duty.call_args_list]
+    pwm.duty.reset_mock()
+    monkeypatch.setattr(time, 'ticks_ms', lambda: base + 101)
+    led.update()
+    assert (0,) in [call.args for call in pwm.duty.call_args_list]
+
+def test_green_led_moving(monkeypatch):
+    pin = Mock()
+    pwm = Mock()
+    led = GreenStatusLED(pin, pwm=pwm)
+    led.moving_flash()
+    base = time.ticks_ms()
+    # 0ms: ON, 125ms: OFF, 250ms: ON, 375ms: OFF
+    for offset, expected in [(0, 1023), (125, 0), (250, 1023), (375, 0)]:
+        monkeypatch.setattr(time, 'ticks_ms', lambda: base + offset)
+        led.update()
+        assert (expected,) in [call.args for call in pwm.duty.call_args_list]
+        pwm.duty.reset_mock()
+
+def test_green_led_off():
+    pin = Mock()
+    pwm = Mock()
+    led = GreenStatusLED(pin, pwm=pwm)
+    led.off()
+    led.update()
+    assert (0,) in [call.args for call in pwm.duty.call_args_list]
+import pytest
+from unittest.mock import Mock
+import time
+from app.actuators import FireboxLED
+
+
+def test_firebox_led_error_flash(monkeypatch):
+    pin = Mock()
+    pwm = Mock()
+    led = FireboxLED(pin, pwm=pwm, red_duty=1000, orange_duty=500)
+    led.set_error(3)
+    base = time.ticks_ms()
+    monkeypatch.setattr(time, 'ticks_ms', lambda: base)
+    led.update()
+    assert (1000,) in [call.args for call in pwm.duty.call_args_list]  # Red solid
+    pwm.duty.reset_mock()
+    monkeypatch.setattr(time, 'ticks_ms', lambda: base + 5001)
+    for i in range(3):
+        monkeypatch.setattr(time, 'ticks_ms', lambda: base + 5001 + i*800)
+        led.update()
+        assert (1000,) in [call.args for call in pwm.duty.call_args_list]  # Red on
+        pwm.duty.reset_mock()
+        monkeypatch.setattr(time, 'ticks_ms', lambda: base + 5001 + i*800 + 400)
+        led.update()
+        assert (0,) in [call.args for call in pwm.duty.call_args_list]  # Red off
+        pwm.duty.reset_mock()
+    monkeypatch.setattr(time, 'ticks_ms', lambda: base + 5001 + 3*800)
+    led.update()
+    assert (1000,) in [call.args for call in pwm.duty.call_args_list]  # Back to solid
+
+
+def test_firebox_led_warning_flash(monkeypatch):
+    pin = Mock()
+    pwm = Mock()
+    led = FireboxLED(pin, pwm=pwm, red_duty=1000, orange_duty=500)
+    led.set_warning(2)
+    base = time.ticks_ms()
+    monkeypatch.setattr(time, 'ticks_ms', lambda: base)
+    led.update()
+    assert (500,) in [call.args for call in pwm.duty.call_args_list]  # Orange solid
+    pwm.duty.reset_mock()
+    monkeypatch.setattr(time, 'ticks_ms', lambda: base + 5001)
+    for i in range(2):
+        monkeypatch.setattr(time, 'ticks_ms', lambda: base + 5001 + i*800)
+        led.update()
+        assert (500,) in [call.args for call in pwm.duty.call_args_list]  # Orange on
+        pwm.duty.reset_mock()
+        monkeypatch.setattr(time, 'ticks_ms', lambda: base + 5001 + i*800 + 400)
+        led.update()
+        assert (0,) in [call.args for call in pwm.duty.call_args_list]  # Orange off
+        pwm.duty.reset_mock()
+    monkeypatch.setattr(time, 'ticks_ms', lambda: base + 5001 + 2*800)
+    led.update()
+    assert (500,) in [call.args for call in pwm.duty.call_args_list]  # Back to solid
+
+def test_firebox_led_clear():
+    pin = Mock()
+    pwm = Mock()
+    led = FireboxLED(pin, pwm=pwm)
+    led.set_error(1)
+    led.clear()
+    pwm.duty.assert_called_with(0)
+
+def test_firebox_led_priority():
+    pin = Mock()
+    pwm = Mock()
+    led = FireboxLED(pin, pwm=pwm)
+    led.set_warning(2)
+    led.set_error(3)
+    assert led.state == 'red'
+    led.set_warning(1)
+    assert led.state == 'red'  # Error takes precedence
 """
 Unit tests for actuators.py module.
 Tests servo control with slew-rate limiting and PID pressure control.

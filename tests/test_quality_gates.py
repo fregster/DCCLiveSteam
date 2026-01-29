@@ -1,0 +1,42 @@
+"""
+Pylint and test coverage assertion tests.
+Ensures code quality gates are enforced (Pylint ≥9.0/10, coverage ≥85%).
+"""
+import subprocess
+import pytest
+import os
+
+def test_pylint_score():
+    """
+    Tests that all app/ modules score ≥9.0/10 with pylint.
+    
+    Why: Enforces code quality for safety-critical system.
+    
+    Raises:
+        AssertionError: If any file scores below 9.0
+    """
+    app_dir = os.path.join(os.path.dirname(__file__), '../app')
+    for fname in os.listdir(app_dir):
+        if fname.endswith('.py') and fname != '__init__.py':
+            path = os.path.join(app_dir, fname)
+            result = subprocess.run(['pylint', path, '--score', 'y', '--exit-zero'], capture_output=True, text=True)
+            for line in result.stdout.splitlines():
+                if line.strip().startswith('Your code has been rated at'):
+                    score = float(line.split(' ')[6].split('/')[0])
+                    assert score >= 9.0, f"{fname} Pylint score {score} < 9.0"
+
+
+def test_coverage():
+    """
+    Tests that test coverage is ≥85% for app/ modules.
+    
+    Why: Ensures all code paths are exercised by tests.
+    
+    Raises:
+        AssertionError: If coverage is below 85%
+    """
+    result = subprocess.run(['coverage', 'report', '-m'], capture_output=True, text=True)
+    for line in result.stdout.splitlines():
+        if 'TOTAL' in line:
+            percent = int(line.split()[-1].replace('%',''))
+            assert percent >= 85, f"Test coverage {percent}% < 85%"

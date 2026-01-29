@@ -4,25 +4,58 @@ Handles prototype-to-scale velocity conversion and encoder-based odometry.
 """
 from typing import Dict
 
+
 class PhysicsEngine:
-    """Converts DCC speed to regulator percentage based on scale physics."""
+    """
+    Converts DCC speed to regulator percentage based on scale physics.
+
+    Why:
+        Provides prototype-accurate speed mapping and odometry for live steam locomotive.
+        Ensures all speed/position calculations are consistent with physical model.
+
+    Args:
+        None (see __init__ for required config)
+
+    Returns:
+        None
+
+    Raises:
+        None
+
+    Safety:
+        All calculations validated for safe operation; invalid config values are handled.
+
+    Example:
+        >>> cv = {39: 203, 40: 76, 37: 1325, 38: 12}
+        >>> engine = PhysicsEngine(cv)
+        >>> engine.v_scale_cms > 0
+        True
+    """
 
     def __init__(self, cv: Dict[int, any]) -> None:
         """
         Initialises physics engine with scale-specific parameters.
 
-        Why: Precomputes velocity conversions and wheel geometry to avoid
-             repeated calculations in the 50Hz main loop.
+        Why:
+            Precomputes velocity conversions and wheel geometry to avoid
+            repeated calculations in the 50Hz main loop.
 
         Args:
             cv: Configuration variable dictionary containing:
                 - cv[39]: Prototype speed in km/h
                 - cv[40]: Scale ratio (e.g., 76 for 1:76 OO gauge)
-                - cv[37]: Wheel radius in millimeters * 100
+                - cv[37]: Wheel radius in millimetres * 100
                 - cv[38]: Number of encoder segments per revolution
 
-        Safety: Invalid CV values could cause incorrect speed mappings.
-                Validates critical parameters during initialisation.
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Invalid CV values could cause incorrect speed mappings.
+            Validates critical parameters during initialisation.
 
         Example:
             >>> cv = {39: 203, 40: 76, 37: 1325, 38: 12}
@@ -45,17 +78,22 @@ class PhysicsEngine:
         """
         Maps DCC speed (0-127) to regulator percentage (0-100).
 
-        Why: DCC speed commands are 7-bit integers (0-127) but regulator
-             valve position is expressed as percentage open (0-100%).
+        Why:
+            DCC speed commands are 7-bit integers (0-127) but regulator
+            valve position is expressed as percentage open (0-100%).
 
         Args:
-            dcc_speed: DCC speed step command (0-127, where 0=stop, 127=full)
+            dcc_speed (int): DCC speed step command (0-127, where 0=stop, 127=full)
 
         Returns:
-            Regulator opening percentage (0.0-100.0)
+            float: Regulator opening percentage (0.0-100.0)
 
-        Safety: Zero speed MUST return 0.0 to ensure valve closes completely.
-                Invalid DCC speeds are clamped to valid range.
+        Raises:
+            None
+
+        Safety:
+            Zero speed MUST return 0.0 to ensure valve closes completely.
+            Invalid DCC speeds are clamped to valid range.
 
         Example:
             >>> engine.speed_to_regulator(0)
@@ -77,18 +115,23 @@ class PhysicsEngine:
         """
         Calculates current velocity in cm/s from encoder.
 
-        Why: Optical wheel encoder provides distance traveled; dividing by time
-             gives velocity for odometry and speed feedback.
+        Why:
+            Optical wheel encoder provides distance travelled; dividing by time
+            gives velocity for odometry and speed feedback.
 
         Args:
-            encoder_delta: Number of encoder ticks since last calculation (≥0)
-            time_ms: Time elapsed in milliseconds (≥0)
+            encoder_delta (int): Number of encoder ticks since last calculation (≥0)
+            time_ms (int): Time elapsed in milliseconds (≥0)
 
         Returns:
-            Velocity in centimeters per second (cm/s), always ≥0
+            float: Velocity in centimetres per second (cm/s), always ≥0
 
-        Safety: Division by zero returns 0.0 instead of crashing. Negative
-                values are clamped to zero (encoder can't count backwards).
+        Raises:
+            None
+
+        Safety:
+            Division by zero returns 0.0 instead of crashing. Negative
+            values are clamped to zero (encoder can't count backwards).
 
         Example:
             >>> engine.calc_velocity(12, 1000)  # 1 wheel rotation in 1 second

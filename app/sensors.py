@@ -8,16 +8,28 @@ from machine import Pin, ADC
 from .config import PIN_BOILER, PIN_SUPER, PIN_TRACK, PIN_PRESSURE, PIN_LOGIC_TEMP, PIN_ENCODER, ADC_SAMPLES
 
 class SensorSuite:
-    """Reads all analog sensors with oversampling.
+    """
+    Reads all analog sensors with oversampling.
 
-    Why: Oversampling (10x) reduces ADC noise by ~3.16x (sqrt(N)), critical for
-    stable thermal readings that control boiler heater duty cycles. Health tracking
-    detects sensor failures and enables graceful degradation mode.
+    Why:
+        Oversampling (10x) reduces ADC noise by ~3.16x (sqrt(N)), critical for
+        stable thermal readings that control boiler heater duty cycles. Health tracking
+        detects sensor failures and enables graceful degradation mode.
 
-    Safety: Initialises all ADCs with ATTN_11DB (0-3.3V range) to prevent over-voltage
-    damage to ESP32 analog frontend. Encoder uses PULL_UP to prevent floating input.
-    Sensor health tracking allows continuous operation with single failed sensor
-    (using cached last-valid value) whilst alerting operator.
+    Args:
+        None
+
+    Returns:
+        None
+
+    Raises:
+        None
+
+    Safety:
+        Initialises all ADCs with ATTN_11DB (0-3.3V range) to prevent over-voltage
+        damage to ESP32 analog frontend. Encoder uses PULL_UP to prevent floating input.
+        Sensor health tracking allows continuous operation with single failed sensor
+        (using cached last-valid value) whilst alerting operator.
 
     Example:
         >>> sensors = SensorSuite()
@@ -26,6 +38,27 @@ class SensorSuite:
         {"boiler_temp": "NOMINAL", "super_temp": "NOMINAL", "logic_temp": "NOMINAL"}
     """
     def __init__(self) -> None:
+        """
+        Initialises all sensor ADCs and health tracking.
+
+        Why:
+            Sets up all ADCs and encoder pin for sensor reading. Applies correct attenuation to prevent over-voltage. Initialises health tracking for graceful degradation.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Ensures all ADCs are configured for 0-3.3V. Health tracking allows continued operation with single failed sensor.
+
+        Example:
+            >>> sensors = SensorSuite()
+        """
         self.adc_boiler = ADC(Pin(PIN_BOILER))
         self.adc_super = ADC(Pin(PIN_SUPER))
         self.adc_track = ADC(Pin(PIN_TRACK))
@@ -66,6 +99,9 @@ class SensorSuite:
 
         Returns:
             int: Averaged 12-bit ADC value (0-4095)
+
+        Raises:
+            None
 
         Safety: Returns integer in valid ADC range. Division by ADC_SAMPLES (10) ensures
         no overflow for sum of 10x 12-bit values (max sum = 40950).
@@ -133,6 +169,9 @@ class SensorSuite:
         Returns:
             bool: True if reading is physically possible, False if invalid
 
+        Raises:
+            None
+
         Safety: Conservative ranges catch failures immediately without false positives.
 
         Example:
@@ -159,20 +198,29 @@ class SensorSuite:
             return False
 
     def read_temps(self) -> Tuple[float, float, float]:
-        """Returns temperatures for all thermal sensors with health tracking.
+        """
+        Returns temperatures for all thermal sensors with health tracking.
 
-        Why: Single atomic read of all thermal sensors ensures consistent snapshot for
-        watchdog monitoring. Health tracking validates readings and enables graceful
-        degradation (use cached values if sensor fails). Reading all three takes ~30ms.
+        Why:
+            Single atomic read of all thermal sensors ensures consistent snapshot for
+            watchdog monitoring. Health tracking validates readings and enables graceful
+            degradation (use cached values if sensor fails). Reading all three takes ~30ms.
+
+        Args:
+            None
 
         Returns:
             Tuple[float, float, float]: (boiler_temp, superheater_temp, logic_temp) in Celsius.
             Failed sensors return last valid cached value. If sensor recovers, normal reading
             resumes in next cycle.
 
-        Safety: Sensor health tracked in self.sensor_health dict (NOMINAL or DEGRADED).
-        failed_sensor_count tracks total failures. failure_reason logs which sensors failed.
-        Allows continued operation with single failed sensor (using cached value).
+        Raises:
+            None
+
+        Safety:
+            Sensor health tracked in self.sensor_health dict (NOMINAL or DEGRADED).
+            failed_sensor_count tracks total failures. failure_reason logs which sensors failed.
+            Allows continued operation with single failed sensor (using cached value).
 
         Example:
             >>> boiler, super, logic = sensors.read_temps()
@@ -231,13 +279,21 @@ class SensorSuite:
         """
         Returns current sensor health status.
 
-        Why: Allows watchdog and main loop to query sensor health without exposing
-        internal state. Used to detect sensor failures and trigger degraded mode.
+        Why:
+            Allows watchdog and main loop to query sensor health without exposing
+            internal state. Used to detect sensor failures and trigger degraded mode.
+
+        Args:
+            None
 
         Returns:
             Dictionary with sensor names as keys, health status ("NOMINAL" or "DEGRADED") as values
 
-        Safety: Read-only method, doesn't modify state.
+        Raises:
+            None
+
+        Safety:
+            Read-only method, doesn't modify state.
 
         Example:
             >>> sensors.get_health_status()
@@ -246,15 +302,24 @@ class SensorSuite:
         return self.sensor_health.copy()
 
     def read_track_voltage(self) -> int:
-        """Returns track voltage in millivolts (scaled for rectified DCC).
+        """
+        Returns track voltage in millivolts (scaled for rectified DCC).
 
-        Why: DCC track voltage (typically 12-18V) is rectified and divided by 5x to
-        fit ESP32's 3.3V ADC range. Used for power-loss detection (CV45 timeout).
+        Why:
+            DCC track voltage (typically 12-18V) is rectified and divided by 5x to
+            fit ESP32's 3.3V ADC range. Used for power-loss detection (CV45 timeout).
+
+        Args:
+            None
 
         Returns:
             int: Track voltage in millivolts (0-16500 typical range for DCC)
 
-        Safety: Returns 0 on disconnected track, triggering power watchdog timeout.
+        Raises:
+            None
+
+        Safety:
+            Returns 0 on disconnected track, triggering power watchdog timeout.
 
         Example:
             >>> sensors.read_track_voltage()
@@ -264,17 +329,26 @@ class SensorSuite:
         return int((raw / 4095.0) * 3300 * 5.0)  # Assuming 5x voltage divider
 
     def read_pressure(self) -> float:
-        """Returns boiler pressure in PSI.
+        """
+        Returns boiler pressure in PSI.
 
-        Why: 0-100 PSI analog sensor (0-3.3V linear) drives PID heater control.
-        Typical operating range is 40-60 PSI for scale steam locomotives.
+        Why:
+            0-100 PSI analog sensor (0-3.3V linear) drives PID heater control.
+            Typical operating range is 40-60 PSI for scale steam locomotives.
+
+        Args:
+            None
 
         Returns:
             float: Boiler pressure in PSI (0.0-100.0)
 
-        Safety: Pressure sensor failure (returning 0 PSI) will cause PID controller
-        to increase heater duty, but thermal limits (CV42) prevent boiler dry-boil.
-        Physical safety valve rated at 100 PSI provides mechanical backup.
+        Raises:
+            None
+
+        Safety:
+            Pressure sensor failure (returning 0 PSI) will cause PID controller
+            to increase heater duty, but thermal limits (CV42) prevent boiler dry-boil.
+            Physical safety valve rated at 100 PSI provides mechanical backup.
 
         Example:
             >>> sensors.read_pressure()
@@ -284,17 +358,26 @@ class SensorSuite:
         return (raw / 4095.0) * 100.0
 
     def update_encoder(self) -> int:
-        """Updates encoder count on state changes.
+        """
+        Updates encoder count on state changes.
 
-        Why: Optical encoder on wheel axle provides odometry for speed calculation
-        (PhysicsEngine.calc_velocity). Falling-edge detection halves interrupt rate.
+        Why:
+            Optical encoder on wheel axle provides odometry for speed calculation
+            (PhysicsEngine.calc_velocity). Falling-edge detection halves interrupt rate.
+
+        Args:
+            None
 
         Returns:
             int: Total encoder pulses since boot (wraps at large values, handled in physics.py)
 
-        Safety: Debouncing not required for optical encoder (no mechanical bounce).
-        Encoder failure (count stops incrementing) causes velocity to read 0, which is
-        safe (locomotive appears stopped).
+        Raises:
+            None
+
+        Safety:
+            Debouncing not required for optical encoder (no mechanical bounce).
+            Encoder failure (count stops incrementing) causes velocity to read 0, which is
+            safe (locomotive appears stopped).
 
         Example:
             >>> initial = sensors.update_encoder()
