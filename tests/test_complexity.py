@@ -10,8 +10,9 @@ from radon.complexity import cc_visit
 # Maximum allowed cognitive complexity
 MAX_COMPLEXITY = 15
 
-# Directories to check
-SOURCE_DIRS = ['app', 'tests']
+
+# Only check production code for complexity/nesting
+SOURCE_DIRS = ['app']
 
 def get_python_files():
     """

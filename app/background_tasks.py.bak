@@ -1,0 +1,281 @@
+"""
+Background task manager for non-blocking operations.
+
+Why: Main 50Hz control loop must stay less than 20 ms. Non-critical operations (USB serial,
+file I/O, garbage collection) can be deferred to background without affecting
+control responsiveness. Queue-based architecture prevents blocking on slow operations.
+
+Safety: All queued operations are non-critical. Task failures don't cascade to main
+loop. Memory-bounded queues prevent heap exhaustion.
+"""
+
+from .background_tasks.serial_print_queue import SerialPrintQueue
+from .background_tasks.file_write_queue import FileWriteQueue
+from .background_tasks.garbage_collector import GarbageCollector
+from .background_tasks.cached_sensor_reader import CachedSensorReader
+
+
+
+
+from .background_tasks.encoder_tracker import EncoderTracker
+
+    def get_pressure(self) -> float:
+        """
+        Get cached pressure reading (non-blocking).
+
+        Why:
+            Allows main loop to access latest pressure reading instantly.
+
+        Args:
+            None
+
+        Returns:
+            Pressure in PSI (0-100)
+
+        Raises:
+            None
+
+        Safety:
+            Always returns immediately.
+
+        Example:
+            >>> p = reader.get_pressure()
+        """
+        return self._cached_pressure
+
+    def get_track_voltage(self) -> float:
+        """
+        Get cached track voltage (non-blocking).
+
+        Why:
+            Allows main loop to access latest track voltage instantly.
+
+        Args:
+            None
+
+        Returns:
+            Track voltage in volts (0-18V)
+
+        Raises:
+            None
+
+        Safety:
+            Always returns immediately.
+
+        Example:
+            >>> v = reader.get_track_voltage()
+        """
+        return self._cached_track_v
+
+    def update_cache(self) -> None:
+        """
+        Refresh sensor cache if stale.
+
+        Why:
+            Only reads sensors if cache older than 100ms. Prevents unnecessary
+            ADC operations while ensuring data stays fresh.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Failed sensor reads keep last-valid values. Non-blocking check,
+            blocking read (only when called explicitly from background).
+
+        Example:
+            >>> reader.update_cache()  # Call periodically from main loop
+        """
+        now = time.ticks_ms()
+
+        # Check if cache needs refresh
+        if time.ticks_diff(now, self._last_update_time) < self._max_cache_age_ms:
+            return
+
+        # Update cache (may take ~30ms with oversampling)
+        try:
+            self._cached_temps = self._sensors.read_temps()
+            self._cached_pressure = self._sensors.read_pressure()
+            self._cached_track_v = self._sensors.read_track_voltage()
+            self._last_update_time = now
+        except Exception:
+            # Sensor read failed, keep last-valid values
+            pass
+
+
+class EncoderTracker:
+    """
+    Interrupt-driven encoder tracking with velocity calculation.
+
+    Why:
+        Polling encoder in main loop adds latency. IRQ-based tracking captures every
+        edge, calculates velocity in background, main loop just reads cached value.
+
+    Args:
+        pin_encoder: Encoder GPIO pin (must support IRQ)
+
+    Returns:
+        None
+
+    Raises:
+        None
+
+    Safety:
+        Velocity calculated from time delta, not just count delta (handles
+        variable loop timing). Cache never stale (IRQ updates continuously).
+
+    Example:
+        >>> tracker = EncoderTracker(pin=14)
+        >>> velocity = tracker.get_velocity_cms()  # Instant, uses cached calculation
+    """
+
+    def __init__(self, pin_encoder: Any) -> None:
+        """
+        Initialize encoder tracker with IRQ.
+
+        Why:
+            Sets up IRQ handler and state for encoder tracking.
+
+        Args:
+            pin_encoder: Encoder GPIO pin (must support IRQ)
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            IRQ handler keeps count, velocity calculation non-blocking.
+
+        Example:
+            >>> tracker = EncoderTracker(pin=14)
+        """
+        self._encoder_pin = pin_encoder
+        self._count = 0
+        self._last_count = 0
+        self._last_time = time.ticks_ms()
+        self._cached_velocity_cms = 0.0
+
+        # Attach IRQ handler
+        try:
+            self._encoder_pin.irq(trigger=self._encoder_pin.IRQ_RISING, handler=self._irq_handler)
+        except Exception:
+            pass  # IRQ setup failed, will fall back to polling
+
+    def _irq_handler(self, pin: Any) -> None:
+        """
+        IRQ callback on encoder edge.
+
+        Why:
+            Runs in interrupt context, must be fast (<10μs). Just increments counter.
+
+        Args:
+            pin: Pin object that triggered the IRQ
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            No allocations, no blocking calls. Thread-safe counter increment.
+
+        Example:
+            >>> # Called by hardware IRQ
+        """
+        self._count += 1
+
+    def update_velocity(self) -> None:
+        """
+        Calculate velocity from encoder delta (call from main loop).
+
+        Why:
+            Velocity calculation (division, time delta) too slow for IRQ. Main loop
+            calls this periodically to update cached velocity.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Non-blocking read of IRQ counter. Division-by-zero protection.
+
+        Example:
+            >>> tracker.update_velocity()  # Call every loop iteration
+        """
+        now = time.ticks_ms()
+        time_delta = time.ticks_diff(now, self._last_time)
+
+        if time_delta >= 1000:  # Update every second
+            count_delta = self._count - self._last_count
+
+            # Calculate velocity (counts/sec to cm/s conversion)
+            # Assumes calibration: 1 count = 0.1 cm (adjust for your encoder)
+            if time_delta > 0:
+                counts_per_sec = (count_delta * 1000) / time_delta
+                self._cached_velocity_cms = counts_per_sec * 0.1  # Scale factor
+
+            self._last_count = self._count
+            self._last_time = now
+
+    def get_velocity_cms(self) -> float:
+        """
+        Get cached velocity calculation (non-blocking).
+
+        Why:
+            Allows main loop to access latest velocity instantly.
+
+        Args:
+            None
+
+        Returns:
+            Velocity in cm/s
+
+        Raises:
+            None
+
+        Safety:
+            Always returns immediately.
+
+        Example:
+            >>> velocity = tracker.get_velocity_cms()
+            >>> velocity
+            45.3
+        """
+        return self._cached_velocity_cms
+
+    def get_count(self) -> int:
+        """
+        Get raw encoder count.
+
+        Why: Provides access to the total number of encoder pulses for velocity and distance calculations.
+
+        Args:
+            None
+
+        Returns:
+            int: Total encoder pulses since boot
+
+        Raises:
+            None
+
+        Safety: Non-blocking read.
+
+        Example:
+            >>> enc = EncoderTask(...)
+            >>> enc.get_count()
+            12345
+        """
+        return self._count

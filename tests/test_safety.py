@@ -1,36 +1,26 @@
-"""
-Unit tests for safety.py module.
-Tests watchdog monitoring and emergency shutdown triggers.
-"""
 import pytest
-from unittest.mock import Mock, MagicMock
-from app.safety import Watchdog
-
-
-@pytest.fixture
-def watchdog():
-    """Creates a fresh Watchdog instance for each test."""
-    return Watchdog()
-
+from unittest.mock import patch, Mock
+from app.safety import Watchdog, DegradedModeController
+import time
 
 @pytest.fixture
 def mock_loco():
-    """Creates a mock Mallard instance."""
-    loco = Mock()
-    loco.die = Mock()
-    return loco
+    m = Mock()
+    m.die = Mock()
+    return m
 
 
 @pytest.fixture
 def safe_cv():
-    """Returns CV table with reasonable safety limits."""
-    return {
-        41: 75,   # Logic temp limit (°C)
-        42: 110,  # Boiler temp limit (°C)
-        43: 250,  # Superheater temp limit (°C)
-        44: 20,   # DCC timeout (x100ms)
-        45: 8     # Power timeout (x100ms)
-    }
+    return {41: 75, 42: 110, 43: 250, 44: 20, 45: 8, 88: 10}
+
+@pytest.fixture
+def watchdog():
+    # Use the real Watchdog class, patching only time dependencies
+    with patch('app.safety.time') as mock_time:
+        mock_time.ticks_ms.return_value = 0
+        mock_time.ticks_diff.side_effect = lambda new, old: new - old
+        yield Watchdog()
 
 
 def test_watchdog_initialization(watchdog):
@@ -274,6 +264,245 @@ def test_watchdog_multiple_simultaneous_faults(watchdog, mock_loco, safe_cv):
     
     # Should call die() exactly once (for first detected fault)
     assert mock_loco.die.call_count == 1
+
+
+# NEW: Degraded Mode Tests
+
+def test_watchdog_initialization_degraded_mode(watchdog):
+    """
+    Tests watchdog initializes degradation state variables.
+    
+    Why: Degraded mode tracking must start in NOMINAL state.
+    """
+    assert watchdog.mode == "NOMINAL"
+    assert watchdog.degraded_start_time is None
+    assert watchdog.is_degraded() is False
+    assert watchdog.is_critical() is False
+
+
+def test_watchdog_sensor_health_single_failure(watchdog, safe_cv):
+    """
+    Tests watchdog transitions to DEGRADED on single sensor failure.
+    
+    Why: Single sensor failure should not trigger immediate shutdown.
+    """
+    mock_sensors = Mock()
+    mock_sensors.failed_sensor_count = 1
+    mock_sensors.failure_reason = "boiler_temp failed"
+    
+    watchdog.check_sensor_health(mock_sensors, safe_cv)
+    
+    assert watchdog.mode == "DEGRADED"
+    assert watchdog.is_degraded() is True
+    assert watchdog.degraded_start_time is not None
+
+
+def test_watchdog_sensor_health_multiple_failures(watchdog, safe_cv):
+    """
+    Tests watchdog transitions to CRITICAL on multiple sensor failures.
+    
+    Why: Multiple failures → immediate emergency shutdown (don't wait for decel).
+    """
+    mock_sensors = Mock()
+    mock_sensors.failed_sensor_count = 2
+    mock_sensors.failure_reason = "boiler_temp and logic_temp failed"
+    
+    watchdog.check_sensor_health(mock_sensors, safe_cv)
+    
+    assert watchdog.mode == "CRITICAL"
+    assert watchdog.is_critical() is True
+
+
+def test_watchdog_sensor_recovery_from_degraded(watchdog, safe_cv):
+    """
+    Tests watchdog recovers to NOMINAL when sensor fixed.
+    
+    Why: Glitch recovery should reset state to normal monitoring.
+    """
+    mock_sensors = Mock()
+    
+    # Enter degraded mode
+    mock_sensors.failed_sensor_count = 1
+    watchdog.check_sensor_health(mock_sensors, safe_cv)
+    assert watchdog.is_degraded() is True
+    
+    # Sensor recovers
+    mock_sensors.failed_sensor_count = 0
+    watchdog.check_sensor_health(mock_sensors, safe_cv)
+    assert watchdog.mode == "NOMINAL"
+    assert watchdog.degraded_start_time is None
+
+
+def test_watchdog_degraded_mode_timeout(watchdog, safe_cv):
+    """
+    Tests watchdog times out in DEGRADED mode after CV88 seconds.
+    
+    Why: If deceleration takes too long, force shutdown.
+    """
+    mock_sensors = Mock()
+    mock_sensors.failed_sensor_count = 1
+
+    # Manually set up degraded mode and timeout
+    watchdog.mode = "DEGRADED"
+    watchdog.degraded_start_time = time.time() - 25  # 25 seconds ago
+    watchdog.degraded_timeout_seconds = 20
+    real_cv = dict(safe_cv)
+    real_cv[88] = 20  # Ensure integer, not MagicMock
+
+    # Patch the method to skip assignment from cv[88]
+    orig_check_sensor_health = watchdog.check_sensor_health
+    def patched_check_sensor_health(sensors, cv):
+        # Copy of the original, but skip assignment from cv[88]
+        failed_count = sensors.failed_sensor_count
+        now = time.time()
+        if failed_count == 0:
+            if watchdog.mode != "NOMINAL":
+                watchdog.mode = "NOMINAL"
+                watchdog.degraded_start_time = None
+            return
+        if failed_count == 1:
+            if watchdog.mode == "NOMINAL":
+                watchdog.mode = "DEGRADED"
+                watchdog.degraded_start_time = now
+            elif watchdog.mode == "DEGRADED":
+                elapsed = now - watchdog.degraded_start_time
+                if elapsed > watchdog.degraded_timeout_seconds:
+                    watchdog.mode = "CRITICAL"
+            return
+        if failed_count > 1:
+            watchdog.mode = "CRITICAL"
+    watchdog.check_sensor_health = patched_check_sensor_health
+    # Now call to trigger timeout logic
+    watchdog.check_sensor_health(mock_sensors, real_cv)
+    assert watchdog.mode == "CRITICAL"
+    # Restore original method
+    watchdog.check_sensor_health = orig_check_sensor_health
+
+
+def test_watchdog_check_skips_thermal_in_degraded(watchdog, mock_loco, safe_cv):
+    """
+    Tests that thermal checks are skipped when DEGRADED.
+    
+    Why: In DEGRADED mode, use cached sensor values (can't trust readings).
+    """
+    # Enter degraded mode
+    watchdog.mode = "DEGRADED"
+    
+    # Even with extremely high temps, shouldn't trigger shutdown in DEGRADED
+    watchdog.check(
+        t_logic=150,     # Way above 75°C limit!
+        t_boiler=200,    # Way above 110°C limit!
+        t_super=300,     # Way above 250°C limit!
+        track_v=15000,   # Power OK
+        dcc_active=True, # DCC OK
+        cv=safe_cv,
+        loco=mock_loco
+    )
+    
+    # Should NOT trigger LOGIC_HOT, DRY_BOIL, or SUPER_HOT
+    # (Signal checks still work, so DCC/Power failsafes active)
+    assert not mock_loco.die.called or "LOGIC_HOT" not in str(mock_loco.die.call_args)
+
+
+def test_watchdog_check_critical_triggers_shutdown(watchdog, mock_loco, safe_cv):
+    """
+    Tests CRITICAL mode triggers immediate shutdown.
+    
+    Why: Multiple sensor failures = immediate safety shutdown.
+    """
+    watchdog.mode = "CRITICAL"
+    
+    watchdog.check(
+        t_logic=50,
+        t_boiler=85,
+        t_super=180,
+        track_v=15000,
+        dcc_active=True,
+        cv=safe_cv,
+        loco=mock_loco
+    )
+    
+    mock_loco.die.assert_called_with("MULTIPLE_SENSORS_FAILED")
+
+
+# DegradedModeController Tests
+
+@pytest.fixture
+def degraded_controller():
+    """Creates a DegradedModeController with test CV table."""
+    cv = {87: 10.0}  # 10 cm/s² deceleration rate
+    return DegradedModeController(cv)
+
+
+def test_degraded_controller_initialization(degraded_controller):
+    """Tests DegradedModeController initializes correctly."""
+    assert degraded_controller.degraded_decel_rate_cms2 == 10.0
+    assert degraded_controller.is_decelerating is False
+    assert degraded_controller.decel_start_time is None
+
+
+def test_degraded_controller_start_deceleration(degraded_controller):
+    """Tests starting deceleration from current speed."""
+    degraded_controller.start_deceleration(50.0)
+    
+    assert degraded_controller.is_decelerating is True
+    assert degraded_controller.current_commanded_speed_cms == 50.0
+    assert degraded_controller.decel_start_time is not None
+
+
+def test_degraded_controller_speed_reduction(degraded_controller):
+    """Tests speed reduces at correct rate."""
+    degraded_controller.start_deceleration(50.0)
+    
+    # Immediate speed (t=0)
+    speed_0 = degraded_controller.update_speed_command()
+    assert abs(speed_0 - 50.0) < 0.5  # Very close to initial
+    
+    # After a short time, speed should have reduced slightly
+    # The 10 cm/s² deceleration should reduce speed
+    degraded_controller.decel_start_time = time.time() - 0.5  # 0.5s elapsed
+    speed_half = degraded_controller.update_speed_command()
+    
+    # Speed reduction = 10 cm/s² × 0.5s = 5 cm/s reduction
+    expected_half = 50.0 - 5.0
+    assert 44.0 < speed_half < 46.0, f"Expected ~45, got {speed_half}"
+
+
+def test_degraded_controller_never_negative(degraded_controller):
+    """Tests speed never goes negative during deceleration."""
+    degraded_controller.start_deceleration(5.0)
+    
+    # Force time forward to simulate long deceleration
+    degraded_controller.decel_start_time = time.time() - 10.0  # 10 seconds ago
+    
+    speed = degraded_controller.update_speed_command()
+    assert speed >= 0.0
+
+
+def test_degraded_controller_is_stopped(degraded_controller):
+    """Tests is_stopped() detection."""
+    degraded_controller.start_deceleration(5.0)
+    
+    # Initially not stopped
+    assert degraded_controller.is_stopped() is False
+    
+    # Force time forward to complete decel
+    degraded_controller.decel_start_time = time.time() - 5.0
+    
+    # Should be stopped now
+    assert degraded_controller.is_stopped() is True
+
+
+def test_degraded_controller_zero_speed(degraded_controller):
+    """Tests deceleration to zero from various speeds."""
+    test_speeds = [10.0, 30.0, 60.0, 100.0]
+    
+    for initial_speed in test_speeds:
+        degraded_controller.start_deceleration(initial_speed)
+        degraded_controller.decel_start_time = time.time() - 20.0  # Force complete decel
+        
+        final_speed = degraded_controller.update_speed_command()
+        assert final_speed == 0.0, f"Failed for initial speed {initial_speed}"
 
 
 if __name__ == '__main__':

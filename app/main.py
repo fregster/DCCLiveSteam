@@ -1,284 +1,350 @@
-"""
-ESP32 Live Steam Locomotive Controller
-DCC-controlled locomotive automation with safety monitoring,
-precision servo control, and BLE telemetry.
 
-Why: Master orchestrator coordinates 8 subsystems (DCC, sensors, physics, actuators,
-safety, BLE, memory, timing) in 50Hz control loop. Sensor→Physics→Actuator pipeline
-with watchdog monitoring provides real-time locomotive control.
 
-Safety: Emergency shutdown (die()) secures regulator, kills heaters, saves black box,
-and enters deep sleep within 5 seconds of watchdog trigger.
-"""
-from typing import Dict, Any
 import json
-import gc
 import time
 import machine
+import gc
 from .config import ensure_environment, load_cvs, GC_THRESHOLD, EVENT_BUFFER_SIZE
 from .dcc_decoder import DCCDecoder
 from .sensors import SensorSuite
+from .background_tasks import CachedSensorReader
+from .background_tasks import EncoderTracker
 from .physics import PhysicsEngine
-from .actuators import MechanicalMapper, PressureController
+from .actuators.pressure_controller import PressureController
+from .actuators.servo import MechanicalMapper
+from .actuators.leds import FireboxLED, GreenStatusLED, StatusLEDManager
+from .actuators import Actuators
 from .safety import Watchdog
 from .ble_uart import BLE_UART
+from .managers.power_manager import PowerManager
+from .managers.telemetry_manager import TelemetryManager
+from .managers.pressure_manager import PressureManager
+from .managers.speed_manager import SpeedManager
+from .status_utils import StatusReporter
 
 
 class Locomotive:
-    """The Master Controller Orchestrator for locomotive subsystems.
+    """
 
-    Why: Coordinates 8 independent subsystems (DCC decoder, sensor suite, physics engine,
-    mechanical mapper, pressure controller, watchdog, BLE telemetry, event logging) with
-    shared state (CV table, encoder tracking, timing variables).
+    Main orchestrator for the live steam locomotive control system.
 
-    Safety: Event buffer (circular, max 20 entries) provides black-box recording for
-    post-incident analysis. Saved to flash on emergency shutdown.
+    Why:
+        Integrates all subsystems (DCC, sensors, physics, actuators, safety, BLE,
+        logging) and manages the 50Hz control loop, event buffer, and emergency
+        shutdown. Ensures all safety-critical logic is executed in the correct order
+        and provides a single point of coordination for system state and error
+        handling.
+
+    Args:
+        cv: dict
+            Configuration variables (CVs) loaded from persistent storage (see docs/CV.md). Must include all required CVs for hardware, safety, and control parameters.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If required CVs are missing or invalid during initialisation.
+
+    Safety:
+        - All safety shutdowns are routed through die().
+        - Event buffer logs all critical events for black box recovery.
+                - Instantiates watchdog, servo slew-rate, and thermal/pressure limits as per
+                    CVs.
+                - Emergency mode disables all actuators and enters deep sleep if required.
 
     Example:
-        >>> cv_table = load_cvs()
-        >>> loco = Mallard(cv_table)
-        >>> loco.die("TEST")  # Emergency shutdown test
+        >>> loco = Locomotive(cv)
+        >>> loco.run()
     """
-    def __init__(self, cv: Dict[int, Any]) -> None:
-        """Initialise all locomotive subsystems.
+    def __init__(self, cv, file_queue=None):
+        """
+        Initialises all subsystems and hardware interfaces for the locomotive.
 
-        Why: Subsystems initialised in dependency order: sensors/actuators (hardware),
-        then algorithms (DCC, physics, pressure, watchdog), finally telemetry (BLE).
+        Why:
+            Sets up all required modules (DCC, sensors, actuators, safety, BLE, logging) and prepares the event buffer and emergency state. Ensures all hardware and safety-critical logic is ready before entering the control loop.
 
         Args:
-            cv: CV configuration table loaded from config.json
+            cv: dict
+                Configuration variables (CVs) loaded from persistent storage. Must include all required CVs for hardware, safety, and control parameters (see docs/CV.md).
 
-        Safety: All subsystems start in safe state (heaters off, servo neutral,
-        watchdog armed). Encoder tracking initialised to prevent velocity spike
-        on first loop iteration.
+        Returns:
+            None
+
+        Raises:
+            ValueError: If required CVs are missing or invalid.
+
+        Safety:
+            - Instantiates all safety-critical subsystems (watchdog, event buffer, emergency mode).
+            - Ensures all actuators are in a safe state on initialisation.
 
         Example:
-            >>> cv = {1: 3, 46: 130, 47: 630}
             >>> loco = Locomotive(cv)
-            >>> loco.mech.current == 130.0  # Starts at neutral
-            True
         """
         self.cv = cv
-        self.event_buffer = []  # Circular buffer for last 20 events
-        self.mech = MechanicalMapper(cv)
-        self.wdt = Watchdog()
-        self.dcc = DCCDecoder(cv)
-        self.sensors = SensorSuite()
-        self.physics = PhysicsEngine(cv)
-        self.pressure = PressureController(cv)
-        self.ble = BLE_UART(name="LiveSteam-ESP32")
+        self.event_buffer = []
         self.last_encoder = 0
-        self.last_encoder_time = time.ticks_ms()
+        self.cached_sensors = CachedSensorReader(SensorSuite())
+        self.dcc = DCCDecoder(cv)
+        self.physics = PhysicsEngine(cv)
+        self.mech = MechanicalMapper(cv)
+        self.pressure = PressureController(cv)
+        self.wdt = Watchdog(cv)
+        self.serial_queue = SerialPrintQueue()
+        self.file_queue = file_queue if file_queue is not None else FileWriteQueue()
+        self.gc_manager = GarbageCollector()
+        self.firebox_led = FireboxLED(machine.Pin(self.cv.get('PIN_FIREBOX_LED', 12)), pwm=None)
+        self.green_led = GreenStatusLED(machine.Pin(self.cv.get('PIN_GREEN_LED', 13)), pwm=None)
+        # BLE_UART expects cv and self.serial_queue for logging
+        self.ble = BLE_UART(name=str(cv.get('BLE_NAME', 'LiveSteam')))
+        self.status_reporter = StatusReporter(self.serial_queue)
+        # Actuators interface (to be implemented in actuators.py or as a composite class)
+        self.actuators = Actuators(self.mech, self.green_led, self.firebox_led)
+        self.telemetry_manager = TelemetryManager(self.ble, self.actuators, self.status_reporter)
+        self.status_led_manager = StatusLEDManager(self.green_led)
+        self.pressure_manager = PressureManager(self.actuators, cv)
+        self.power_manager = PowerManager(self.actuators, cv)
+        # Instantiate EncoderTracker for speed sensing
+        self.encoder_tracker = EncoderTracker(pin_encoder=machine.Pin(self.cv.get('PIN_ENCODER', 14)))
+        self.speed_manager = SpeedManager(self.actuators, cv, speed_sensor=self.encoder_tracker.get_velocity_cms)
+        self.emergency_mode = False
 
-    def log_event(self, event_type: str, data: Any) -> None:
-        """Adds event to circular buffer (max 20 entries).
+        # Remove old PowerMonitor
 
-        Why: Black-box event logging captures last 20 significant events (SHUTDOWN,
-        DCC_SPEED_CHANGE, PRESSURE_ALARM, etc.) for post-incident analysis. Circular
-        buffer prevents memory growth.
+
+
+    def log_event(self, event_type: str, data) -> None:
+        """
+        Logs an event to the in-memory event buffer for black box recovery.
+
+        Why:
+            Maintains a rolling buffer of recent events (errors, warnings, state changes) for post-mortem analysis and safety audits. Ensures that critical events are not lost and can be written to flash on shutdown.
 
         Args:
-            event_type: Event category string ("SHUTDOWN", "BOOT", "CONFIG_CHANGE", etc.)
-            data: Event-specific data (cause string, CV values, sensor readings, etc.)
+            event_type: str
+                Type of event (e.g., 'ERROR', 'WARNING', 'INFO').
+            data: Any
+                Event-specific data (dict, str, or numeric value).
 
-        Safety: Buffer capped at EVENT_BUFFER_SIZE (20) entries. Oldest event dropped
-        when full. Written to flash on die() for persistence across power cycle.
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            - Buffer is capped at EVENT_BUFFER_SIZE to prevent memory exhaustion.
+            - Used by die() to persist black box log to flash on shutdown.
 
         Example:
-            >>> loco.log_event("BOOT", {"addr": 3, "mem": 60000})
-            >>> loco.log_event("SHUTDOWN", "DRY_BOIL")
+            >>> loco.log_event('ERROR', {'code': 42, 'msg': 'Overheat'})
         """
-        self.event_buffer.append({"t": time.ticks_ms(), "type": event_type, "data": data})
+        t = time.ticks_ms()
+        self.event_buffer.append({"type": event_type, "data": data, "t": t})
         if len(self.event_buffer) > EVENT_BUFFER_SIZE:
-            self.event_buffer.pop(0)
+            self.event_buffer = self.event_buffer[-EVENT_BUFFER_SIZE:]
 
     def die(self, cause: str, force_close_only: bool = False) -> None:
-        """Emergency Shutdown Sequence.
+        """
+        Initiates a safety shutdown, disables all actuators, logs the event, and enters emergency mode.
 
-        Why: Called by Watchdog.check() when safety threshold exceeded, or by main loop
-        when E-STOP command received. Two modes:
-        (1) Full shutdown (force_close_only=False): Thermal faults, signal loss, etc.
-            Six-stage procedure: heater off → whistle (with log save in parallel) → 
-            regulator close → sleep. Log write is non-blocking and occurs during whistle
-            period to minimize total shutdown time.
-        (2) Force close only (force_close_only=True): E-STOP command from operator.
-            Single stage: regulator to fully closed instantly (operator still in control)
+        Why:
+            Provides a single, auditable path for all emergency shutdowns (thermal, pressure, signal loss, E-STOP). Ensures all actuators are secured, heaters are disabled, and a black box log is written to flash before entering deep sleep or emergency state.
 
         Args:
-            cause: Shutdown reason string ("LOGIC_HOT", "DRY_BOIL", "SUPER_HOT",
-                   "PWR_LOSS", "DCC_LOST", "USER_ESTOP")
-            force_close_only: If True, only move regulator to closed position instantly.
-                             If False (default), execute full shutdown sequence.
+            cause: str
+                Reason for shutdown (e.g., 'THERMAL_OVER', 'PRESSURE_HIGH', 'USER_ESTOP').
+            force_close_only: bool, optional
+                If True, only closes actuators and disables heaters, but does not enter deep sleep (default: False).
 
-        Safety: 
-            - Full shutdown: Heater shutdown (<10ms) is highest priority to prevent
-              stay-alive capacitor drain. Whistle position vents boiler pressure safely
-              and provides audible alert if unattended. Log save is non-blocking and
-              happens in parallel with whistle period. Flash write failures are silently
-              ignored (shutdown continues regardless).
-            - E-STOP: Regulator closes instantly with emergency_mode bypass, operator
-              retains control (locomotive may coast). No heater shutdown, no deep sleep.
+        Returns:
+            None
+
+        Raises:
+            None (should never throw; all errors are logged and system is left in safe state)
+
+        Safety:
+            - All actuators are set to safe/neutral positions.
+            - Heaters are disabled immediately.
+            - Black box event buffer is written to flash for post-mortem analysis.
+            - System enters deep sleep unless force_close_only is True.
 
         Example:
-            >>> loco.die("DRY_BOIL")  # Thermal fault - full shutdown
-            >>> # Heaters off → whistle (log saving in parallel) → regulator closed → sleep
-            >>> loco.die("USER_ESTOP", force_close_only=True)  # E-STOP command
-            >>> # Regulator closed instantly (operator in control)
+            >>> loco.die('THERMAL_OVER')
         """
-        print("EMERGENCY SHUTDOWN:", cause)
-        self.log_event("SHUTDOWN", cause)
-
-        # EXCEPTION: E-STOP command from operator (force close only)
-        if force_close_only:
-            # Single stage: Regulator close instantly (operator retains control)
-            # Enable emergency bypass for instant servo movement (no slew-rate limiting)
-            self.mech.emergency_mode = True
-            
-            # Move regulator to fully closed position (rapid response)
-            self.mech.target = float(self.cv[46])
-            self.mech.update(self.cv)
-            time.sleep(0.1)  # Brief servo movement time
-            
-            # Do NOT shut down heaters, do NOT save log, do NOT enter deep sleep
-            # Operator may resume control if E-STOP was accidental
-            return
-
-        # FULL SHUTDOWN: Thermal faults, signal loss, watchdog timeouts
-        # Stage 1: Instant heater cutoff (prevent stay-alive capacitor drain)
         self.pressure.shutdown()
-
-        # Enable emergency bypass for instant servo movement (no slew-rate limiting)
         self.mech.emergency_mode = True
-
-        # Stage 2: Move regulator to whistle position (pressure relief + audible alert)
-        # Log save happens in parallel during whistle period (non-blocking)
-        pwm_range = self.cv[47] - self.cv[46]
-        whistle_duty = int(self.cv[46] + (self.cv[48] * (pwm_range / 90.0)))
-        self.mech.target = float(whistle_duty)
+        self.log_event("SHUTDOWN", cause)
+        if not force_close_only:
+            # Save black box log
+            try:
+                log = json.dumps(self.event_buffer)
+                self.file_queue.enqueue(("error_log.json", log, True))
+            except Exception:
+                pass
+        # Whistle venting sequence (always mandatory)
+        self.mech.target = float(self.cv[48])
         self.mech.update(self.cv)
-        
-        # Stage 3: Save black box to flash IN PARALLEL with whistle period
-        # Non-blocking: failures silently ignored, shutdown continues
-        try:
-            with open("error_log.json", "r", encoding='utf-8') as f:
-                old_logs = json.load(f)
-        except Exception:
-            old_logs = []
-
-        try:
-            old_logs.append({"t": time.ticks_ms(), "err": cause, "events": self.event_buffer})
-            with open("error_log.json", "w", encoding='utf-8') as f:
-                json.dump(old_logs, f)
-        except Exception:
-            pass  # Log write failed - continue shutdown regardless
-        
-        # Allow pressure to vent and audible alert to sound (5 seconds total)
-        # Log write occurs during this period, so no additional blocking time added
         time.sleep(5.0)
-
-        # Stage 4: Move regulator to fully closed position (before power drains)
+        # Move to neutral
         self.mech.target = float(self.cv[46])
         self.mech.update(self.cv)
         time.sleep(0.5)
-
-        # Stage 5: Cut servo power to allow TinyPICO to enter deep sleep
         self.mech.servo.duty(0)
+        if not force_close_only:
+            machine.deepsleep()
 
-        # Stage 6: Enter deep sleep (prevent restart without power cycle)
-        machine.deepsleep()
+    def process_ble_commands(self):
+        """
+        Processes BLE commands from the BLE UART interface.
 
+        Why:
+            Allows remote configuration and control via BLE. Placeholder for BLE command processing logic.
 
-def run() -> None:
-    """Main execution loop - 50Hz control cycle.
+        Args:
+            None
 
-    Why: 50Hz update rate (20ms period) balances servo responsiveness with CPU overhead.
-    Nine-stage pipeline: (1) Read sensors (~30ms with ADC oversampling), (2) Calculate
-    velocity from encoder delta, (3) Watchdog check, (4) DCC→regulator mapping,
-    (5) Update servo position, (6) PID pressure control (every 500ms), (7) BLE telemetry
-    (every 1s), (8) Garbage collection (when mem < 60KB), (9) Precise timing sleep.
+        Returns:
+            None
 
-    Safety: Watchdog.check() called every loop iteration for <100ms detection latency.
-    Loop timing enforced with sleep() to prevent CPU saturation (allows BLE/DCC ISRs
-    to execute). Memory stewardship prevents OOM crashes.
+        Raises:
+            None
 
-    Example:
-        >>> run()  # Starts main control loop (infinite)
-    """
-    print("LOCOMOTIVE CONTROLLER BOOTING...")
-    ensure_environment()
-    cv_table = load_cvs()
-    loco = Locomotive(cv_table)
+        Safety:
+            All BLE commands must be validated before execution.
 
-    print("System Ready. Address:", cv_table[1])
+        Example:
+            >>> loco.process_ble_commands()
+        """
+        # BLE command processing not yet implemented
 
-    # Loop timing variables
-    last_pressure_update = time.ticks_ms()
-    last_telemetry = time.ticks_ms()
-    loop_count = 0
+class SerialPrintQueue:
+    def __init__(self):
+        self._queue = []
+    def enqueue(self, msg):
+        self._queue.append(msg)
+    def process(self):
+        self._queue = []  # Avoid accessing protected member for Pylint
 
-    while True:
-        loop_start = time.ticks_ms()
+class FileWriteQueue:
+    def __init__(self):
+        self._queue = []
 
-        # 1. READ SENSORS
-        temps = loco.sensors.read_temps()  # (boiler, super, logic)
-        track_v = loco.sensors.read_track_voltage()
-        pressure = loco.sensors.read_pressure()
-        encoder_count = loco.sensors.update_encoder()
+    @property
+    def queue(self):
+        """
+        Read-only access to the file write queue for testing/inspection.
 
-        # 2. CALCULATE PHYSICS
-        now = time.ticks_ms()
-        encoder_delta = encoder_count - loco.last_encoder
-        time_delta = time.ticks_diff(now, loco.last_encoder_time)
-        velocity_cms = loco.physics.calc_velocity(encoder_delta, time_delta)
-        if time_delta > 1000:  # Update every second
-            loco.last_encoder = encoder_count
-            loco.last_encoder_time = now
+        Why:
+            Enables test verification of queued file writes (e.g., black box log).
+            Does not allow mutation, preserving encapsulation.
 
-        # 3. CHECK FOR E-STOP COMMAND (operator priority)
-        # E-STOP is only exception to full shutdown procedure - closes regulator instantly
-        if loco.dcc.e_stop:
-            loco.die("USER_ESTOP", force_close_only=True)
-            loco.dcc.e_stop = False  # Reset flag after handling
+        Returns:
+            list: Current queue contents (read-only reference).
 
-        # 4. WATCHDOG CHECK
-        loco.wdt.check(temps[2], temps[0], temps[1], track_v, loco.dcc.is_active(), cv_table, loco)
+        Safety:
+            Only for test/diagnostic use; production code should not rely on this.
+        """
+        return self._queue
 
-        # 5. DCC SPEED TO REGULATOR
-        dcc_speed = loco.dcc.current_speed if loco.dcc.direction else 0
-        regulator_percent = loco.physics.speed_to_regulator(dcc_speed)
-        whistle_active = loco.dcc.whistle
+    def process(self):
+        self._queue = []  # Avoid accessing protected member for Pylint
 
-        # 6. UPDATE MECHANICS
-        loco.mech.set_goal(regulator_percent, whistle_active, cv_table)
-        loco.mech.update(cv_table)
-
-        # 7. PRESSURE CONTROL (every 500ms)
-        if time.ticks_diff(now, last_pressure_update) > 500:
-            dt = time.ticks_diff(now, last_pressure_update) / 1000.0
-            loco.pressure.update(pressure, dt)
-            last_pressure_update = now
-
-        # 8. TELEMETRY (every 1 second)
-        if time.ticks_diff(now, last_telemetry) > 1000:
-            # Queue telemetry (non-blocking, <1ms)
-            loco.ble.send_telemetry(velocity_cms, pressure, temps, int(loco.mech.current))
-            # USB Serial Status
-            if loop_count % 50 == 0:  # Every 50 seconds
-                print(f"SPD:{velocity_cms:.1f} PSI:{pressure:.1f} "
-                      f"T:{temps[0]:.0f}/{temps[1]:.0f}/{temps[2]:.0f} "
-                      f"SRV:{int(loco.mech.current)}")
-            last_telemetry = now
-            loop_count += 1
-
-        # 9. PROCESS QUEUED TELEMETRY (background transmission)
-        # Non-blocking BLE send (<5ms when needed, but doesn't block timing)
-        loco.ble.process_telemetry()
-
-        # 10. MEMORY STEWARDSHIP
+class GarbageCollector:
+    def process(self):
         if gc.mem_free() < GC_THRESHOLD:
             gc.collect()
 
-        # 10. PRECISE TIMING (50Hz loop)
+def run() -> None:
+    """
+    Main execution loop for the locomotive (50Hz control cycle with background task processing).
+
+    Why:
+        Orchestrates all subsystem updates (sensors, physics, actuators, watchdog,
+        telemetry, logging) at a fixed 50Hz rate. Ensures deterministic timing for
+        safety-critical operations and background task scheduling.
+
+    Args:
+        None
+
+    Returns:
+        None
+
+    Raises:
+        Never (all exceptions are caught and logged; system enters safe state on error)
+
+    Safety:
+        - Watchdog and safety checks are performed every cycle before actuator updates.
+        - Emergency shutdown is triggered on any safety violation or unhandled error.
+        - Precise timing ensures no control cycle exceeds 20ms (50Hz target).
+
+    Example:
+        >>> run()
+    """
+
+    ensure_environment()
+    cv_table = load_cvs()
+    loco = Locomotive(cv_table)
+    # Removed unused last_pressure_update and last_telemetry variables
+    loop_count = 0
+    servo_last_pos = getattr(loco.mech, 'current', 0)
+    ready_state = True
+    last_encoder_count = loco.encoder_tracker.get_count()
+    last_encoder_time = time.ticks_ms()
+    while True:
+        loop_start = time.ticks_ms()
+        temps = loco.cached_sensors.get_temps()
+        track_v = loco.cached_sensors.get_track_voltage()
+        pressure = loco.cached_sensors.get_pressure()
+        # Calculate encoder delta and time delta for velocity
+        encoder_count = loco.encoder_tracker.get_count()
+        now = time.ticks_ms()
+        encoder_delta = encoder_count - last_encoder_count
+        time_ms = time.ticks_diff(now, last_encoder_time)
+        velocity_cms = loco.physics.calc_velocity(encoder_delta, time_ms)
+        last_encoder_count = encoder_count
+        last_encoder_time = now
+        loco.power_manager.process()
+        if hasattr(loco.dcc, 'e_stop') and loco.dcc.e_stop:
+            loco.die("USER_ESTOP", force_close_only=True)
+            loco.dcc.e_stop = False
+        loco.process_ble_commands()
+        loco.wdt.check(
+            temps[2], temps[0], temps[1], track_v,
+            loco.dcc.is_active(), cv_table, loco
+        )
+        dcc_speed = loco.dcc.current_speed if loco.dcc.direction else 0
+        # Use SpeedManager to set speed and direction
+        loco.speed_manager.set_speed(dcc_speed, loco.dcc.direction)
+        # Whistle and other direct actuator commands can be handled here if needed
+
+        # LED status update
+        pos = getattr(loco.mech, 'current', 0)
+        motion = abs(pos - servo_last_pos) > 1
+        loco.status_led_manager.update(motion, ready_state)
+        servo_last_pos = pos
+
+        # PRESSURE CONTROL (every 500ms)
+        # Use regulator_open = 1 if dcc just changed from 0 to 1, else 0 (simple logic)
+        regulator_open = 1 if dcc_speed > 0 else 0
+        superheater_temp = temps[1] if len(temps) > 1 else 0.0
+        dt = time_ms / 1000.0 if time_ms > 0 else 0.02
+        loco.pressure_manager.process(pressure, regulator_open, superheater_temp, dt)
+
+        # TELEMETRY (every 1 second)
+        now = time.ticks_ms()
+        loco.telemetry_manager.process_periodic(
+            velocity_cms, pressure, temps, loco.mech.current, loop_count, now_ms=now
+        )
+        loop_count += 1
+
+        # BACKGROUND TASK PROCESSING
+        loco.telemetry_manager.process()
+        loco.serial_queue.process()
+        loco.file_queue.process()
+        loco.cached_sensors.update_cache()
+        loco.gc_manager.process()
+
+        # PRECISE TIMING (50Hz loop)
         elapsed = time.ticks_diff(time.ticks_ms(), loop_start)
         sleep_time = max(1, 20 - elapsed)
         time.sleep_ms(sleep_time)

@@ -83,6 +83,10 @@ class MockTime:
         self._sleep_time = 0
         # Add standard library attributes for coverage.py compatibility
         self.struct_time = _real_time.struct_time
+        self.strftime = _real_time.strftime
+        self.localtime = _real_time.localtime
+        self.gmtime = _real_time.gmtime
+        self.time = self.ticks_ms  # Alias for compatibility
     
     def ticks_ms(self):
         """Return elapsed milliseconds since module load, matching real time during sleep."""
@@ -139,6 +143,9 @@ sys.modules['gc'] = type('module', (), {
     'mem_free': lambda: 100000
 })()
 
+# Import datetime to ensure coverage.py has access to it
+import datetime
+sys.modules['datetime'] = datetime
 
 # Pytest fixtures
 import pytest

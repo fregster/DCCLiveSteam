@@ -341,3 +341,203 @@ def test_multiple_telemetry_sends(mock_ble, mock_advertising):
     
     # Verify all sends completed
     assert mock_ble.gatts_notify.call_count == 3
+
+
+# ===== NEW TESTS: BLE RX Command Reception =====
+
+
+def test_ble_rx_buffer_initialization(mock_ble, mock_advertising):
+    """
+    Verify RX buffer and queue initialized correctly.
+    
+    Why: RX infrastructure must be ready to receive CV update commands.
+    Buffer accumulates partial commands, queue holds complete commands.
+    
+    Safety: Max buffer size (128 bytes) and queue size (16 commands) prevent
+    memory exhaustion from malicious or buggy client.
+    """
+    ble = BLE_UART()
+    
+    assert ble.rx_queue == []
+    assert ble._rx_buffer == bytearray()
+    assert ble._max_rx_buffer == 128
+    assert ble._max_rx_queue == 16
+
+
+def test_ble_rx_single_complete_command(mock_ble, mock_advertising):
+    """
+    Verify single complete command (with newline) is extracted to queue.
+    
+    Why: Commands arrive as "CV32=20.0\\n". Complete commands (with \\n terminator)
+    are extracted and queued for main loop processing.
+    
+    Example:
+        BLE client sends: b'CV32=20.0\\n'
+        Result: rx_queue contains ['CV32=20.0']
+    """
+    ble = BLE_UART()
+    
+    # Mock gatts_read to return complete command
+    ble._ble.gatts_read.return_value = b'CV32=20.0\n'
+    
+    # Simulate RX event
+    ble._on_rx()
+    
+    # Verify command extracted to queue
+    assert len(ble.rx_queue) == 1
+    assert ble.rx_queue[0] == 'CV32=20.0'
+    assert len(ble._rx_buffer) == 0  # Buffer cleared
+
+
+def test_ble_rx_partial_command_buffering(mock_ble, mock_advertising):
+    """
+    Verify partial commands (no newline) are held in buffer.
+    
+    Why: BLE packets may split commands across multiple transmissions.
+    Data must accumulate in buffer until \\n terminator arrives.
+    
+    Example:
+        RX event 1: b'CV3'
+        RX event 2: b'2=20'
+        RX event 3: b'.0\\n'
+        Result: After event 3, command 'CV32=20.0' queued
+    """
+    ble = BLE_UART()
+    
+    # First RX: Partial command
+    ble._ble.gatts_read.return_value = b'CV3'
+    ble._on_rx()
+    assert len(ble.rx_queue) == 0  # Nothing queued yet
+    assert ble._rx_buffer == b'CV3'  # Held in buffer
+    
+    # Second RX: More data, still no newline
+    ble._ble.gatts_read.return_value = b'2=20'
+    ble._on_rx()
+    assert len(ble.rx_queue) == 0
+    assert ble._rx_buffer == b'CV32=20'
+    
+    # Third RX: Complete with newline
+    ble._ble.gatts_read.return_value = b'.0\n'
+    ble._on_rx()
+    assert len(ble.rx_queue) == 1
+    assert ble.rx_queue[0] == 'CV32=20.0'
+    assert len(ble._rx_buffer) == 0  # Buffer cleared
+
+
+def test_ble_rx_multiple_commands_in_one_packet(mock_ble, mock_advertising):
+    """
+    Verify multiple commands in single packet are all extracted.
+    
+    Why: BLE client may send multiple commands in rapid succession.
+    All newline-terminated commands must be extracted and queued.
+    
+    Example:
+        BLE client sends: b'CV32=20.0\\nCV49=1200\\nCV39=180\\n'
+        Result: rx_queue contains ['CV32=20.0', 'CV49=1200', 'CV39=180']
+    """
+    ble = BLE_UART()
+    
+    # Three commands in one packet
+    ble._ble.gatts_read.return_value = b'CV32=20.0\nCV49=1200\nCV39=180\n'
+    ble._on_rx()
+    
+    # Verify all three queued
+    assert len(ble.rx_queue) == 3
+    assert ble.rx_queue[0] == 'CV32=20.0'
+    assert ble.rx_queue[1] == 'CV49=1200'
+    assert ble.rx_queue[2] == 'CV39=180'
+
+
+def test_ble_rx_buffer_overflow_protection(mock_ble, mock_advertising):
+    """
+    Verify buffer doesn't exceed 128 bytes (discards oldest data).
+    
+    Why: Prevents memory exhaustion from malicious or buggy client sending
+    endless data without newlines. Oldest data discarded to stay under limit.
+    
+    Safety: Critical for embedded system with limited RAM (~60KB free).
+    """
+    ble = BLE_UART()
+    
+    # Send 150 bytes without newline (exceeds 128 byte limit)
+    large_data = b'X' * 150
+    ble._ble.gatts_read.return_value = large_data
+    ble._on_rx()
+    
+    # Verify buffer capped at 128 bytes (last 128 bytes kept)
+    assert len(ble._rx_buffer) == 128
+    assert ble._rx_buffer == b'X' * 128  # Oldest data discarded
+
+
+def test_ble_rx_queue_overflow_protection(mock_ble, mock_advertising):
+    """
+    Verify queue doesn't exceed 16 commands (silently drops extras).
+    
+    Why: Prevents queue overflow from rapid command bursts. Commands
+    processed 1 per 20ms loop iteration, so 16-deep queue provides ~320ms
+    buffering (adequate for normal operation).
+    
+    Safety: Queue overflow protection prevents memory exhaustion.
+    """
+    ble = BLE_UART()
+    
+    # Send 20 commands (exceeds 16 command limit)
+    commands = '\n'.join([f'CV{i}={i}' for i in range(20)]) + '\n'
+    ble._ble.gatts_read.return_value = commands.encode('utf-8')
+    ble._on_rx()
+    
+    # Verify queue capped at 16 commands
+    assert len(ble.rx_queue) == 16
+
+
+def test_ble_rx_invalid_utf8_handling(mock_ble, mock_advertising):
+    """
+    Verify invalid UTF-8 bytes are discarded gracefully.
+    
+    Why: Malicious or corrupted data may contain invalid UTF-8. Decoding
+    errors must be caught and invalid commands discarded.
+    
+    Safety: Invalid data must not crash main loop or BLE stack.
+    """
+    ble = BLE_UART()
+    
+    # Invalid UTF-8 sequence with newline
+    ble._ble.gatts_read.return_value = b'\xff\xfe\xfd\n'
+    ble._on_rx()
+    
+    # Verify no command queued (invalid UTF-8 discarded)
+    assert len(ble.rx_queue) == 0
+
+
+def test_ble_rx_empty_commands_ignored(mock_ble, mock_advertising):
+    """
+    Verify empty commands (just newlines) are ignored.
+    
+    Why: BLE client may send accidental newlines. Empty strings should
+    not be queued as commands.
+    """
+    ble = BLE_UART()
+    
+    # Multiple newlines only
+    ble._ble.gatts_read.return_value = b'\n\n\n'
+    ble._on_rx()
+    
+    # Verify no commands queued
+    assert len(ble.rx_queue) == 0
+
+
+def test_ble_rx_irq_event_3_triggers_on_rx(mock_ble, mock_advertising):
+    """
+    Verify IRQ event 3 (gatts_write) calls _on_rx() method.
+    
+    Why: BLE stack calls _irq(3, data) when RX characteristic receives data.
+    This must trigger command processing.
+    """
+    ble = BLE_UART()
+    ble._on_rx = Mock()  # Mock the _on_rx method
+    
+    # Simulate IRQ event 3 (RX data available)
+    ble._irq(3, ())
+    
+    # Verify _on_rx was called
+    ble._on_rx.assert_called_once()

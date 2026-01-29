@@ -12,29 +12,48 @@ import bluetooth
 from .ble_advertising import advertising_payload
 
 class BLE_UART:
-    """BLE UART interface for wireless telemetry streaming.
+    """
+    BLE UART interface for wireless telemetry streaming.
 
-    Why: Nordic UART Service (NUS) provides serial-like communication over BLE.
-    Standardized UUIDs (6E400001-...) ensure compatibility with mobile apps.
-    TX characteristic (notify) sends data to phone, RX (write) receives commands.
+    Why:
+        Nordic UART Service (NUS) provides serial-like communication over BLE.
+        Standardized UUIDs (6E400001-...) ensure compatibility with mobile apps.
+        TX characteristic (notify) sends data to phone, RX (write) receives commands.
 
-    Safety: BLE operates independently of locomotive control. Connection loss does
-    not affect operation. Telemetry send failures are silently ignored to prevent
-    blocking main control loop.
+    Args:
+        name: BLE device name visible in scan results (default "LiveSteam")
+
+    Returns:
+        None
+
+    Raises:
+        None
+
+    Safety:
+        BLE operates independently of locomotive control. Connection loss does
+        not affect operation. Telemetry send failures are silently ignored to prevent
+        blocking main control loop.
 
     Example:
         >>> ble = BLE_UART(name="LiveSteam")
         >>> ble.send_telemetry(35.2, 55.3, (95.0, 210.0, 45.0), 450)
     """
     def __init__(self, name: str = "LiveSteam") -> None:
-        """Initialise BLE stack and Nordic UART Service.
+        """
+        Initialise BLE stack and Nordic UART Service.
 
         Why: NUS requires three components: Service UUID (6E400001), TX characteristic
         (6E400003, notify), RX characteristic (6E400002, write). GATT registration
         must complete before advertising starts.
 
         Args:
-            name: BLE device name visible in scan results (default "LiveSteam")
+            name (str): BLE device name visible in scan results (default "LiveSteam")
+
+        Returns:
+            None
+
+        Raises:
+            None
 
         Safety: BLE active() must be called before irq() to prevent nil pointer.
         GATT handles (_handle_tx, _handle_rx) stored for gatts_notify() calls.
@@ -54,6 +73,12 @@ class BLE_UART:
         self._telemetry_buffer: Optional[bytes] = None  # Queued telemetry packet
         self._telemetry_pending = False  # True if packet queued but not yet sent
 
+        # RX buffer for receiving commands (NEW: BLE CV updates)
+        self.rx_queue: list[str] = []  # Parsed commands ready for processing
+        self._rx_buffer = bytearray()  # Accumulation buffer for partial commands
+        self._max_rx_buffer = 128  # Maximum buffer size (safety limit)
+        self._max_rx_queue = 16  # Maximum queued commands (safety limit)
+
         # Standard Nordic UART Service (NUS) UUIDs
         self._uart_uuid = bluetooth.UUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
         TX_UUID = bluetooth.UUID("6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
@@ -65,11 +90,21 @@ class BLE_UART:
         self._advertise()
 
     def _advertise(self) -> None:
-        """Start BLE advertising with device name and service UUID.
+        """
+        Start BLE advertising with device name and service UUID.
 
         Why: 100ms advertising interval balances discovery speed with power consumption.
         Advertising payload includes device name and service UUID to enable filtering
         in mobile apps.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
 
         Safety: Called after disconnect to enable reconnection without reboot.
 
@@ -79,13 +114,20 @@ class BLE_UART:
         self._ble.gap_advertise(100, advertising_payload(name=self._name, services=[self._uart_uuid]))
 
     def send(self, data: bytes) -> None:
-        """Send raw bytes over BLE UART TX characteristic.
+        """
+        Send raw bytes over BLE UART TX characteristic.
 
         Why: Low-level send method for arbitrary binary data. Wrapped in try-except
         to prevent BLE errors from crashing main loop.
 
         Args:
-            data: Raw bytes to transmit (max ~20 bytes per packet for BLE 4.2)
+            data (bytes): Raw bytes to transmit (max ~20 bytes per packet for BLE 4.2)
+
+        Returns:
+            None
+
+        Raises:
+            None
 
         Safety: Silently ignores send failures (disconnected client, buffer full).
         Does not block or raise exceptions. Connection handle 0 targets first client.
@@ -101,17 +143,24 @@ class BLE_UART:
 
     def send_telemetry(self, speed: float, psi: float, temps: Tuple[float, float, float],
                       servo_duty: int) -> None:
-        """Queue telemetry packet for non-blocking background transmission.
+        """
+        Queue telemetry packet for non-blocking background transmission.
 
         Why: BLE operations can block main loop. Instead of sending immediately,
         telemetry is formatted and queued. Call process_telemetry() from main loop
         to send queued packets. Prevents 1-5ms BLE blocking on 50Hz (20ms) cycle.
 
         Args:
-            speed: Locomotive speed in cm/s from PhysicsEngine.calc_velocity()
-            psi: Boiler pressure in PSI from SensorSuite.read_pressure()
-            temps: (boiler_c, super_c, logic_c) tuple from SensorSuite.read_temps()
-            servo_duty: Current servo PWM duty from MechanicalMapper.current
+            speed (float): Locomotive speed in cm/s from PhysicsEngine.calc_velocity()
+            psi (float): Boiler pressure in PSI from SensorSuite.read_pressure()
+            temps (Tuple[float, float, float]): (boiler_c, super_c, logic_c) tuple from SensorSuite.read_temps()
+            servo_duty (int): Current servo PWM duty from MechanicalMapper.current
+
+        Returns:
+            None
+
+        Raises:
+            None (format errors are caught and packet discarded)
 
         Safety: Non-blocking. Format errors are caught and packet discarded. Does not
         affect main loop timing (returns immediately after queueing). Queued packet
@@ -139,11 +188,21 @@ class BLE_UART:
             self._telemetry_pending = False
 
     def process_telemetry(self) -> None:
-        """Send queued telemetry packet to connected client (background task).
+        """
+        Send queued telemetry packet to connected client (background task).
 
         Why: Called from main loop to transmit queued telemetry without blocking
         main control cycle. BLE operations (1-5ms) happen here instead of in
         send_telemetry(), keeping main loop predictable for real-time control.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
 
         Safety: Non-blocking. If send fails, packet is discarded and next one queued.
         Multiple queued packets result in latest overwriting previous (acceptable
@@ -166,13 +225,22 @@ class BLE_UART:
             self._telemetry_buffer = None
 
     def is_connected(self) -> bool:
-        """Returns True if a BLE client is connected.
+        """
+        Returns True if a BLE client is connected.
 
         Why: Allows main loop to skip telemetry formatting when no client connected,
         saving ~2ms per 50Hz iteration.
 
+        Args:
+            None
+
         Returns:
             bool: True if client connected, False otherwise
+
+        Raises:
+            None
+
+        Safety: BLE connection status is read-only and does not affect control logic.
 
         Example:
             >>> if ble.is_connected():
@@ -181,17 +249,26 @@ class BLE_UART:
         return self._connected
 
     def _irq(self, event: int, data: Tuple) -> None:
-        """Handle BLE connection events (connect/disconnect).
+        """
+        Handle BLE connection events (connect/disconnect) and RX data.
 
-        Why: BLE stack calls this IRQ handler on connection state changes. Event codes:
-        1 = _IRQ_CENTRAL_CONNECT (client connected), 2 = _IRQ_CENTRAL_DISCONNECT (lost).
+        Why: BLE stack calls this IRQ handler on connection state changes and data RX.
+        Event codes: 1=connect, 2=disconnect, 3=RX data available. Commands arrive
+        as ASCII strings terminated with newline, possibly split across multiple events.
 
         Args:
-            event: BLE event code (1=connect, 2=disconnect)
-            data: Event-specific data tuple (unused for connection events)
+            event (int): BLE event code (1=connect, 2=disconnect, 3=RX gatts_write)
+            data (Tuple): Event-specific data tuple (unused for connection events)
+
+        Returns:
+            None
+
+        Raises:
+            None
 
         Safety: Restart advertising on disconnect enables automatic reconnection.
         Connection state tracked in _connected flag for is_connected() queries.
+        RX buffer limited to 128 bytes to prevent memory exhaustion.
 
         Example:
             >>> # Called automatically by BLE stack
@@ -204,3 +281,60 @@ class BLE_UART:
         elif event == 2:  # _IRQ_CENTRAL_DISCONNECT
             self._connected = False
             self._advertise()  # Restart advertising
+        elif event == 3:  # _IRQ_GATTS_WRITE (RX data received)
+            self._on_rx()
+
+    def _on_rx(self) -> None:
+        """
+        Process incoming BLE RX data and extract complete commands.
+
+        Why: Commands arrive as ASCII strings with \n terminator. Single RX events
+        may contain partial commands, so data is accumulated in buffer until newline
+        is found. Complete commands are extracted and queued for main loop processing.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None (invalid UTF-8 or RX errors are silently ignored)
+
+        Safety: Buffer limited to 128 bytes max. If exceeded, oldest data is discarded
+        to prevent memory exhaustion. Queue limited to 16 commands to prevent overflow.
+
+        Example:
+            >>> # Receives "CV32=20.0\n"
+            >>> ble._on_rx()  # Extracts command, adds to rx_queue
+            >>> ble.rx_queue
+            ['CV32=20.0']
+        """
+        try:
+            # Read all available data from RX characteristic
+            data = self._ble.gatts_read(self._handle_rx)
+            if not data:
+                return
+
+            # Append to buffer, enforce max size
+            self._rx_buffer.extend(data)
+            if len(self._rx_buffer) > self._max_rx_buffer:
+                # Discard oldest data to stay under limit
+                self._rx_buffer = self._rx_buffer[-self._max_rx_buffer:]
+
+            # Extract complete commands (terminated by \n)
+            while b'\n' in self._rx_buffer:
+                newline_index = self._rx_buffer.index(b'\n')
+                command_bytes = self._rx_buffer[:newline_index]
+                self._rx_buffer = self._rx_buffer[newline_index + 1:]  # Remove processed
+
+                # Decode and queue command
+                try:
+                    command_str = command_bytes.decode('utf-8').strip()
+                    if command_str and len(self.rx_queue) < self._max_rx_queue:
+                        self.rx_queue.append(command_str)
+                except (UnicodeDecodeError, AttributeError):
+                    pass  # Invalid UTF-8, discard
+
+        except Exception:
+            pass  # Silently ignore RX errors (don't crash main loop)

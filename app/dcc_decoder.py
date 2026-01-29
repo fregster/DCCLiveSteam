@@ -8,11 +8,21 @@ from machine import Pin
 from .config import PIN_DCC, DCC_ONE_MIN, DCC_ONE_MAX, DCC_ZERO_MIN, DCC_ZERO_MAX
 
 class DCCDecoder:
-    """Decodes NMRA DCC packets from track signal using interrupt-driven bit timing.
+    """
+    Decodes NMRA DCC packets from track signal using interrupt-driven bit timing.
 
     Why: DCC signal is Manchester-encoded square wave at ~8kHz. Software decode requires
     microsecond-precision edge timing to distinguish 1-bit (52-64µs) from 0-bit (95-119µs).
     Interrupt handler captures edges at hardware speed, main loop parses complete packets.
+
+    Args:
+        cv (Dict[int, any]): CV configuration table for address matching and mode selection.
+
+    Returns:
+        DCCDecoder: Instance of the decoder class.
+
+    Raises:
+        None
 
     Safety: Watchdog monitors last_valid timestamp (CV44 timeout, default 500ms). Signal
     loss triggers emergency shutdown via Locomotive.die(). Address filtering (CV1/CV17-18)
@@ -26,17 +36,24 @@ class DCCDecoder:
         True
     """
     def __init__(self, cv: Dict[int, any]) -> None:
-        """Initialise DCC decoder with address matching and interrupt handler.
+        """
+        Initialise DCC decoder with address matching and interrupt handler.
 
         Why: DCC packets broadcast to all locomotives. CV1 (short address 1-127) or
         CV17-18 (long address 128-10239) determines which packets this decoder accepts.
         CV29 bit 5 selects addressing mode.
 
         Args:
-            cv: CV configuration table with keys:
+            cv (Dict[int, any]): CV configuration table with keys:
                 - 1: Short address (1-127)
                 - 29: Configuration byte (bit 5 = long address enable)
                 - 17-18: Long address (if CV29 bit 5 set)
+
+        Returns:
+            None
+
+        Raises:
+            None
 
         Safety: IRQ handler attached to both edges (rising/falling) to capture all
         half-bit transitions. Pin configured as INPUT (not PULL_UP) because DCC track
@@ -74,14 +91,21 @@ class DCCDecoder:
         self.pin.irq(trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING, handler=self._edge_handler)
 
     def _edge_handler(self, pin: Pin) -> None:
-        """ISR: Decodes DCC bit stream from edge timing.
+        """
+        ISR: Decodes DCC bit stream from edge timing.
 
         Why: NMRA S-9.1 standard defines bit timing: 1-bit = 52-64µs half-period,
         0-bit = 95-119µs (nominally 58µs and 100µs). Manchester encoding has two edges
         per bit, so we accumulate bits until stop bit (1) detected.
 
         Args:
-            pin: Pin object (required by MicroPython IRQ signature, unused)
+            pin (Pin): Pin object (required by MicroPython IRQ signature, unused)
+
+        Returns:
+            None
+
+        Raises:
+            None
 
         Safety: Invalid timing (outside all valid ranges) clears bit buffer to prevent
         decoding corrupted data. ISR executes in <10µs to avoid missing next edge.
@@ -111,11 +135,21 @@ class DCCDecoder:
             self.bits = []
 
     def _decode_packet(self) -> None:
-        """Parses DCC packet structure according to NMRA S-9.2 standard.
+        """
+        Parses DCC packet structure according to NMRA S-9.2 standard.
 
         Why: DCC packet format: [preamble] [address] [instruction] [error-detect] [stop].
         Each byte is 8 data bits + 1 stop bit (always 1). Address can be 1 or 2 bytes
         (short vs long addressing). Speed commands are instruction byte 0b111xxxxx.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None (malformed packets are silently discarded)
 
         Safety: Address filtering discards packets for other locomotives (prevents
         multi-locomotive collisions). Try-except wrapper silently discards malformed
@@ -183,14 +217,21 @@ class DCCDecoder:
             pass  # Silently discard malformed packets
 
     def is_active(self) -> bool:
-        """Returns True if DCC signal received recently (within CV44 timeout).
+        """
+        Returns True if DCC signal received recently (within CV44 timeout).
 
         Why: Track power loss or DCC base station failure causes signal dropout.
         Watchdog.check() monitors this method to trigger emergency shutdown if signal
         lost for >CV44 milliseconds (default 500ms).
 
+        Args:
+            None
+
         Returns:
             bool: True if valid packet decoded within last 500ms, False otherwise
+
+        Raises:
+            None
 
         Safety: Conservative 500ms timeout allows for DCC refresh rate (NMRA minimum
         30ms) plus margin for processing delays. False return forces Locomotive.die() to
