@@ -1,0 +1,24 @@
+# Main project requirements for DCCLiveSteam
+# Only dependencies for the main app and testing (not sim tools)
+
+# Core
+micropython
+
+# BLE and serial (for MicroPython compatibility, use as stubs for local testing)
+pyserial
+bleak
+
+# Testing
+pytest
+pytest-cov
+pytest-mock
+
+# Linting and code quality
+toml
+pylint
+radon
+
+# Type checking
+typing-extensions
+
+# Only include main app dependencies, not sim/cli tools
