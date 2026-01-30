@@ -1,3 +1,4 @@
+# (ensure file ends with a single newline)
 """
 conftest.py -- Mocks MicroPython modules for CI and desktop testing.
 Ensures that imports like 'import machine' do not fail during pytest or doctest runs.

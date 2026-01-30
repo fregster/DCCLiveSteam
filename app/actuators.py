@@ -2,7 +2,6 @@ from typing import Dict, Optional
 import time
 from machine import Pin, PWM
 from .config import PIN_SERVO, PWM_FREQ_SERVO
-
 __all__ = [
     "GreenStatusLED",
     "RegulatorServo",

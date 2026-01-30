@@ -15,9 +15,9 @@ def venv_path(cmd):
 def test_pylint_score():
     """
     Tests that all app/ modules score ≥9.0/10 with pylint.
-    
+
     Why: Enforces code quality for safety-critical system.
-    
+
     Raises:
         AssertionError: If any file scores below 9.0
     """

@@ -2,9 +2,14 @@
 DCC signal decoder for NMRA-compliant track signals.
 Implements interrupt-driven bit decoding and packet parsing.
 """
+ # DCC bit timing constants (NMRA S-9.1)
+DCC_ONE_MIN = 52   # 1-bit: 52µs minimum
+DCC_ONE_MAX = 64   # 1-bit: 64µs maximum
+DCC_ZERO_MIN = 95  # 0-bit: 95µs minimum
+DCC_ZERO_MAX = 119 # 0-bit: 119µs maximum
+
 from typing import Dict
 import time
-from .config import PIN_DCC, DCC_ONE_MIN, DCC_ONE_MAX, DCC_ZERO_MIN, DCC_ZERO_MAX
 from app.hardware_interfaces import ISensor
 
 class DCCDecoder:
