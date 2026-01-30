@@ -358,17 +358,18 @@ class Watchdog:
         """
         Checks all safety parameters and triggers shutdown if thresholds exceeded.
 
-        Why: Called every 50Hz loop iteration (20ms) to detect thermal runaway or signal
-        loss within <100ms. Early detection prevents boiler damage (thermal inertia ~60s)
-        or uncontrolled operation after power loss.
+        Why:
+            Called every 50Hz loop iteration (20ms) to detect thermal runaway or signal
+            loss within <100ms. Early detection prevents boiler damage (thermal inertia ~60s)
+            or uncontrolled operation after power loss.
 
         Args:
-            t_logic: Logic bay temperature in Celsius (TinyPICO ambient sensor)
-            t_boiler: Boiler shell temperature in Celsius (NTC thermistor)
-            t_super: Superheater tube temperature in Celsius (NTC thermistor)
-            track_v: Track voltage in millivolts (rectified DCC, 5x voltage divider)
-            dcc_active: True if valid DCC packet decoded within last 500ms
-            cv: CV configuration table with threshold keys:
+            t_logic: float, Logic bay temperature in Celsius (TinyPICO ambient sensor)
+            t_boiler: float, Boiler shell temperature in Celsius (NTC thermistor)
+            t_super: float, Superheater tube temperature in Celsius (NTC thermistor)
+            track_v: int, Track voltage in millivolts (rectified DCC, 5x voltage divider)
+            dcc_active: bool, True if valid DCC packet decoded within last 500ms
+            cv: Dict[int, Any], CV configuration table with threshold keys:
                 - 41: Logic temp limit (default 75°C)
                 - 42: Boiler temp limit (default 110°C)
                 - 43: Superheater temp limit (default 250°C)
@@ -376,14 +377,20 @@ class Watchdog:
                 - 45: Power timeout in 100ms units (default 10 = 1000ms)
             loco: Locomotive instance reference (for calling die() method)
 
-        Safety: Thermal limits provide graduated protection (logic < boiler < superheater).
-        Track voltage threshold (1500mV) detects <50% power drop. DCC timeout (500ms)
-        allows for 16 missed packets (30ms NMRA refresh rate). Power timeout (1000ms)
-        prevents false triggers from momentary track dirt.
-        
-        In DEGRADED mode (single sensor failure), skips normal thermal checks to use
-        cached sensor values instead. Signals via distress beep notify operator.
-        Multiple failures bypass degradation → immediate shutdown.
+        Returns:
+            None
+
+        Raises:
+            None (calls loco.die() for shutdown, does not raise exceptions)
+
+        Safety:
+            Thermal limits provide graduated protection (logic < boiler < superheater).
+            Track voltage threshold (1500mV) detects <50% power drop. DCC timeout (500ms)
+            allows for 16 missed packets (30ms NMRA refresh rate). Power timeout (1000ms)
+            prevents false triggers from momentary track dirt.
+            In DEGRADED mode (single sensor failure), skips normal thermal checks to use
+            cached sensor values instead. Signals via distress beep notify operator.
+            Multiple failures bypass degradation → immediate shutdown.
 
         Calls loco.die() with cause string:
             - "LOGIC_HOT": TinyPICO overheating (firmware crash risk)

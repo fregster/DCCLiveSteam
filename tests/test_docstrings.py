@@ -2,6 +2,7 @@
 Docstring presence and format validation test.
 Ensures all functions/classes have required docstrings (Why/Args/Returns/Raises/Safety/Example).
 """
+
 import ast
 import pytest
 from pathlib import Path
@@ -57,7 +58,6 @@ def test_docstring_presence_and_format():
     """
     import os
     if not os.environ.get("RUN_DOCSTRING_TESTS", "0") == "1":
-        import pytest
         pytest.skip("Docstring tests are disabled unless RUN_DOCSTRING_TESTS=1 is set.")
     all_missing = []
     for py_file in get_python_files():

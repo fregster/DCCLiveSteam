@@ -1,3 +1,22 @@
+### Sensor Fallback & Degraded Modes
+
+**Symptom:** System operates in a reduced or degraded mode (e.g., no cruise control, heaters run conservatively).
+
+**Possible Causes:**
+- Speed sensor or pressure sensor is missing, disconnected, or faulty.
+
+**System Behaviour:**
+- If the speed sensor is unavailable, SpeedManager reverts to direct throttle mode (regulator % from DCC), and cruise control is disabled.
+- If the pressure sensor is unavailable, PressureManager uses temperature-only fallback logic for boiler and superheater control.
+- If any temperature sensor fails, the system will always trigger a safety shutdown.
+
+**Solutions:**
+1. Check sensor wiring and connections.
+2. Inspect BLE telemetry for sensor health status or degraded mode warnings.
+3. Replace or repair faulty sensors as needed.
+4. For pressure, ensure the mechanical safety valve is functional as a last resort.
+
+**Note:** Degraded mode is a safety feature to allow continued operation with reduced capability, not a substitute for proper sensor repair.
 ### Speed/Throttle Not Responding as Expected
 
 **Symptom:** Locomotive does not accelerate smoothly, or throttle does not match DCC speed command.

@@ -15,6 +15,10 @@ class SpeedManager:
         cv: Configuration variables (dict)
         speed_sensor: Callable returning current speed in cm/s
 
+    Fallback/Degraded Mode:
+        - If speed sensor is unavailable or fails, automatically reverts to direct throttle mode (regulator % from DCC), regardless of CV52.
+        - speed_sensor_available flag is set False for runtime and startup failures.
+
     Safety:
         Regulator is limited to 0-100%. Sudden changes are slew-rate limited elsewhere.
     """
@@ -24,6 +28,14 @@ class SpeedManager:
         self.speed_sensor = speed_sensor
         self.target_speed = 0.0  # cm/s
         self._last_regulator = 0.0
+        # Sensor health flag: if speed sensor is unavailable or fails, fallback to direct throttle
+        self.speed_sensor_available = True
+        # Test sensor health at init
+        try:
+            # Try to call the speed sensor once (should return a float/int)
+            _ = self.speed_sensor()
+        except Exception:
+            self.speed_sensor_available = False
 
     def set_speed(self, dcc_speed: float, direction: bool) -> None:
         """
@@ -44,6 +56,13 @@ class SpeedManager:
         Example:
             >>> sm.set_speed(64, True)
         """
+        # If speed sensor is unavailable, always use direct throttle mode
+        if not self.speed_sensor_available:
+            regulator_percent = self._dcc_to_regulator(dcc_speed)
+            self._last_regulator = regulator_percent
+            self.actuators.set_regulator(regulator_percent, direction)
+            return
+
         mode = self.cv.get("52", 1)  # CV52: 0=Direct throttle, 1=Feedback speed control (default)
         if mode == 0:
             # Direct throttle mode: DCC speed sets regulator directly
@@ -52,11 +71,18 @@ class SpeedManager:
             self.actuators.set_regulator(regulator_percent, direction)
         else:
             # Feedback speed control (cruise control)
-            self.target_speed = self._dcc_to_target_speed(dcc_speed)
-            actual_speed = self.speed_sensor()
-            regulator_percent = self._compute_regulator(actual_speed, self.target_speed)
-            self._last_regulator = regulator_percent
-            self.actuators.set_regulator(regulator_percent, direction)
+            try:
+                self.target_speed = self._dcc_to_target_speed(dcc_speed)
+                actual_speed = self.speed_sensor()
+                regulator_percent = self._compute_regulator(actual_speed, self.target_speed)
+                self._last_regulator = regulator_percent
+                self.actuators.set_regulator(regulator_percent, direction)
+            except Exception:
+                # If speed sensor fails at runtime, fallback to direct throttle
+                self.speed_sensor_available = False
+                regulator_percent = self._dcc_to_regulator(dcc_speed)
+                self._last_regulator = regulator_percent
+                self.actuators.set_regulator(regulator_percent, direction)
 
     def _dcc_to_regulator(self, dcc_speed: float) -> float:
         """
