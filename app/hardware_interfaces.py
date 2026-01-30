@@ -56,7 +56,8 @@ class ISensor(ABC):
         Example:
             >>> temp = sensor.read()
         """
-        pass
+        # Interface method; must be implemented by subclass
+        raise NotImplementedError()
 
     def health(self) -> bool:
         """
@@ -105,7 +106,7 @@ class IActuator(ABC):
     Example:
         class Servo(IActuator):
             def set(self, value):
-                pass
+                raise NotImplementedError()
     """
     @abstractmethod
     def set(self, value: Any) -> None:
@@ -130,7 +131,8 @@ class IActuator(ABC):
         Example:
             >>> servo.set(50)
         """
-        pass
+        # Interface method; must be implemented by subclass
+        raise NotImplementedError()
 
     def status(self) -> Any:
         """

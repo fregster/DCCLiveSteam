@@ -24,13 +24,15 @@ def test_pylint_score():
     app_dir = os.path.join(os.path.dirname(__file__), '../app')
     pylint_path = venv_path('pylint')
     for fname in os.listdir(app_dir):
-        if fname.endswith('.py') and fname != '__init__.py':
-            path = os.path.join(app_dir, fname)
-            result = subprocess.run([pylint_path, path, '--score', 'y', '--exit-zero'], capture_output=True, text=True)
-            for line in result.stdout.splitlines():
-                if line.strip().startswith('Your code has been rated at'):
-                    score = float(line.split(' ')[6].split('/')[0])
-                    assert score >= 9.0, f"{fname} Pylint score {score} < 9.0"
+        # Only check app/ modules, not test files or conftest.py
+        if not fname.endswith('.py') or fname == '__init__.py' or fname == 'conftest.py':
+            continue
+        path = os.path.join(app_dir, fname)
+        result = subprocess.run([pylint_path, path, '--score', 'y', '--exit-zero'], capture_output=True, text=True)
+        for line in result.stdout.splitlines():
+            if line.strip().startswith('Your code has been rated at'):
+                score = float(line.split(' ')[6].split('/')[0])
+                assert score >= 9.0, f"{fname} Pylint score {score} < 9.0"
 
 
 def test_coverage():
