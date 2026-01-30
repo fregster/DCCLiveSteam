@@ -20,8 +20,38 @@ This code controls a **live steam locomotive** with:
 
 ## 🧪 Testing & Quality Standards
 
-### **MANDATORY: Test-First Development**
+
+### **MANDATORY: PEP8 and Pylint-Conformant Code BEFORE Testing**
 **For EVERY Python function/class created or modified:**
+
+1. **Write code that is PEP8 and pylint-compliant before running tests.**
+    - Use 4 spaces per indentation level (never tabs)
+    - Maximum line length: 100 chars for docstrings, 120 chars hard limit for all code
+    - Imports must be at the top of the file, in standard order (stdlib, third-party, local)
+    - Remove all unused imports and variables
+    - No trailing whitespace or blank lines at file end
+    - Use descriptive variable names and type hints
+    - No bare except: always specify exception types
+    - No duplicate code blocks
+    - All code must be formatted and structured to pass pylint with a score ≥ 9.0/10 before running or writing tests
+
+2. **Test-First Development**
+    - Write unit tests in `tests/` before implementing new logic
+    - All tests must pass with zero warnings (`pytest -W error`)
+    - Mock hardware dependencies (never require physical hardware)
+
+3. **Edge Case Testing:**
+    - Boundary values, invalid inputs, failure modes
+
+4. **Strict Linting and Coverage:**
+    - Pylint score ≥ 9.0/10 (no errors, only minor style warnings permitted)
+    - Type hints required for all functions
+    - Cognitive complexity ≤ 15 per function
+    - Test coverage ≥ 85%
+    - No bare except
+
+5. **Cognitive Complexity Test:**
+    - Create a test in `tests/test_complexity.py` that fails if any function exceeds complexity 15
 
 1. **Create unit tests first** in `tests/` directory matching module structure
    - Example: `sensors.py` → `tests/test_sensors.py`
@@ -36,8 +66,10 @@ This code controls a **live steam locomotive** with:
    - Never require physical hardware for unit tests
 
 ### **Code Quality Gates**
+
 All Python code must pass:
 - ✅ **Strict linting:** `pylint` with score ≥ 9.0/10 (no errors, only minor style warnings permitted)
+- ✅ **PEP8 formatting:** 4 spaces per indentation, no tabs, correct import order, no trailing whitespace
 - ✅ **Type hints:** All function signatures must have type annotations
 - ✅ **Cognitive complexity:** ≤ 15 per function (SonarQube standard)
 - ✅ **Test coverage:** ≥ 85% line coverage minimum
