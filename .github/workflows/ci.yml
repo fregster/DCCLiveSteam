@@ -67,7 +67,7 @@ jobs:
           pip install -r requirements.txt
       - name: Run doctest
         run: |
-          pytest --doctest-modules app/
+          python -c "import sys; sys.modules['machine']=type('machine', (), {})()" && pytest --doctest-modules app/
 
   pylint:
     name: Pylint
@@ -187,7 +187,7 @@ jobs:
           pip install -r requirements.txt
       - name: Check version
         run: |
-          python -c "from app import get_version; print(f'Version: {get_version()}')"
+          python -c "import sys; sys.modules['machine']=type('machine', (), {})(); from app import get_version; print(f'Version: {get_version()}')"
 
   report:
     name: Generate & Upload Status Report
