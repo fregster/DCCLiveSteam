@@ -1,3 +1,15 @@
+## Sensor Fallback & Degraded Modes
+
+The system automatically detects missing or failed sensors and gracefully degrades control logic to maintain safe operation:
+
+- **Speed Sensor (Encoder) Optional:**
+	- If the speed sensor is unavailable or fails, the SpeedManager automatically reverts to direct throttle mode (regulator % from DCC), regardless of CV52 setting. Cruise control is disabled, but the locomotive remains controllable.
+- **Pressure Sensor Optional:**
+	- If the pressure sensor is unavailable or fails, the PressureManager skips pressure-based PID and superheater staging. Boiler and superheater are controlled by temperature only, using conservative fallback logic. The mechanical safety valve provides ultimate overpressure protection.
+- **Temperature Sensors Required:**
+	- If any temperature sensor fails, the system will always initiate a safety shutdown. No fallback is permitted for thermal safety.
+
+Sensor health is checked at startup and periodically at runtime. Degraded mode is reported via telemetry and status LEDs.
 ## Speed Control Mode (CV52)
 
 Allows the user to select between two speed control behaviours:

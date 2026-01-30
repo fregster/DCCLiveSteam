@@ -15,6 +15,11 @@ class SensorSuite:
 	"""
 	Unified interface for all sensors (pressure, speed, temperature, track voltage).
 	Handles ADC initialisation and delegates to sensor modules.
+
+	Fallback/Degraded Mode:
+		- If speed sensor is unavailable or fails, speed_sensor_available is set False for manager fallback.
+		- If pressure sensor is unavailable or fails, pressure_sensor_available is set False for manager fallback.
+		- Temperature sensors are always required for safety; if they fail, system must shut down.
 	"""
 	def __init__(self):
 		self.adc_boiler = ADC(Pin(PIN_BOILER))
@@ -22,11 +27,49 @@ class SensorSuite:
 		self.adc_track = ADC(Pin(PIN_TRACK))
 		self.adc_pressure = ADC(Pin(PIN_PRESSURE))
 		self.adc_logic = ADC(Pin(PIN_LOGIC_TEMP))
-		self.speed_sensor = SpeedSensor()
+		# Sensor health flags
+		self.speed_sensor_available = True
+		self.pressure_sensor_available = True
+		# Speed sensor init with health check
+		try:
+			self.speed_sensor = SpeedSensor()
+			# Try to update encoder to check health
+			_ = self.speed_sensor.update_encoder()
+		except Exception:
+			self.speed_sensor_available = False
+			self.speed_sensor = None
 		# Expose legacy encoder attributes for test compatibility
-		self.encoder_pin = self.speed_sensor.encoder_pin
-		self.encoder_count = self.speed_sensor.encoder_count
-		self.encoder_last = self.speed_sensor.encoder_last
+		self.encoder_pin = self.speed_sensor.encoder_pin if self.speed_sensor else None
+		self.encoder_count = self.speed_sensor.encoder_count if self.speed_sensor else 0
+		self.encoder_last = self.speed_sensor.encoder_last if self.speed_sensor else 0
+		# Pressure sensor health check (try reading once)
+		try:
+			_ = read_pressure(self.adc_pressure)
+		except Exception:
+			self.pressure_sensor_available = False
+	def check_health(self):
+		"""
+		Checks health of all sensors and updates availability flags.
+		Returns a dict of sensor health status.
+		"""
+		# Speed sensor
+		try:
+			if self.speed_sensor:
+				_ = self.speed_sensor.update_encoder()
+			self.speed_sensor_available = True
+		except Exception:
+			self.speed_sensor_available = False
+		# Pressure sensor
+		try:
+			_ = read_pressure(self.adc_pressure)
+			self.pressure_sensor_available = True
+		except Exception:
+			self.pressure_sensor_available = False
+		# Temperature sensors are checked in read_temps
+		return {
+			"speed_sensor": self.speed_sensor_available,
+			"pressure_sensor": self.pressure_sensor_available,
+		}
 
 	@property
 	def encoder_count(self):
