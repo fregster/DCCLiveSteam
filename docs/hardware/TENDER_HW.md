@@ -5,7 +5,7 @@ The Tender is the "Brain" of the system, housing the TinyPICO and command signal
 
 | Component | Specification | Purpose |
 | :--- | :--- | :--- |
-| **MCU** | TinyPICO (ESP32-PICO-D4) | Master control, BLE host, and I2C Master. |
+| **MCU** | Pimoroni TinyPICO ESP32 (ESP32-PICO-D4) | Master control, BLE host, I2C Master. 4MB flash, 520KB SRAM, 3.3V logic, USB-C, LiPo support. |
 | **Signal Isolator** | 6N137 High-Speed Opto | Decouples DCC track voltage from ESP32 GPIO. |
 | **Step-Down Regulator** | MP1584EN Buck Converter | Drops 14V track power to 5V logic power. |
 | **Power MOSFETs** | 2x IRLZ44N (TO-220) | PWM control for Boiler and Superheater heater elements. |
@@ -22,7 +22,8 @@ The Tender is the "Brain" of the system, housing the TinyPICO and command signal
 * **GPIO 27:** Servo PWM signal to Umbilical.
 * **GPIO 34:** Water level sensor analogue input (ADC).
 
-## 2.3 Complete GPIO Allocation
+
+## 2.3 Complete GPIO Allocation (Pimoroni TinyPICO ESP32)
 
 | GPIO | Function | Direction | Notes |
 |:-----|:---------|:----------|:------|
@@ -42,11 +43,12 @@ The Tender is the "Brain" of the system, housing the TinyPICO and command signal
 | **Available for Expansion** | | | |
 | 4, 5, 13, 16-19, 23, 33-39 | User Expansion | - | 26 pins available for future features |
 
-**Critical Boot Requirements:**
+**Critical Boot Requirements (Pimoroni TinyPICO ESP32):**
 * GPIOs 0, 2, 12, and 15 have specific voltage requirements during ESP32 boot sequence
 * **Never** connect loads to these pins without understanding boot constraints
 * Incorrect configuration prevents ESP32 from booting or entering programming mode
 * See ESP32 datasheet Section 2.3 "Strapping Pins" for complete details
+* Board features USB-C for power/programming and optional LiPo battery support (not used in this design, but available for expansion).
 
 ## 2.4 Optocoupler Circuit Details
 

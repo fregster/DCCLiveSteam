@@ -47,23 +47,32 @@ class PowerManager:
         if amps > self.power_budget_amps:
             self.overcurrent_count += 1
             self.last_overcurrent_time = time.ticks_ms()
-            # Limit boiler PWM by power budget
+            # 1. Shed superheater first
             try:
-                cur_pwm = getattr(self.actuators, 'boiler_pwm', 0)
-                new_pwm = int(cur_pwm * 0.8)
-                self.actuators.set_boiler_pwm(new_pwm)
+                self.actuators.set_superheater_duty(0)
             except Exception:
                 pass
-            # If still over, disable superheater
             amps2 = self.estimate_total_current()
-            if amps2 > self.power_budget_amps:
-                try:
-                    self.actuators.set_super_pwm(0)
-                except Exception:
-                    pass
-            # If still over, trigger safety shutdown
+            if amps2 <= self.power_budget_amps:
+                return
+            # 2. Shed boiler next (reduce to 50%)
+            try:
+                cur_pwm = getattr(self.actuators, 'boiler_pwm', 0)
+                new_pwm = int(cur_pwm * 0.5)
+                self.actuators.set_boiler_duty(new_pwm)
+            except Exception:
+                pass
             amps3 = self.estimate_total_current()
-            if amps3 > self.power_budget_amps:
+            if amps3 <= self.power_budget_amps:
+                return
+            # 3. Shed servo (set to idle/disable if possible)
+            try:
+                if hasattr(self.actuators, 'set_servo_idle'):
+                    self.actuators.set_servo_idle()
+            except Exception:
+                pass
+            amps4 = self.estimate_total_current()
+            if amps4 > self.power_budget_amps:
                 self.actuators.safety_shutdown('POWER_BUDGET_EXCEEDED')
         else:
             self.overcurrent_count = 0

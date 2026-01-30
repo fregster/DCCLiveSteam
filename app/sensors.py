@@ -42,7 +42,8 @@ class SensorSuite:
         Initialises all sensor ADCs and health tracking.
 
         Why:
-            Sets up all ADCs and encoder pin for sensor reading. Applies correct attenuation to prevent over-voltage. Initialises health tracking for graceful degradation.
+            Sets up all ADCs and encoder pin for sensor reading. Applies correct attenuation to prevent
+            over-voltage. Initialises health tracking for graceful degradation.
 
         Args:
             None
@@ -54,7 +55,8 @@ class SensorSuite:
             None
 
         Safety:
-            Ensures all ADCs are configured for 0-3.3V. Health tracking allows continued operation with single failed sensor.
+            Ensures all ADCs are configured for 0-3.3V. Health tracking allows continued operation with
+            single failed sensor.
 
         Example:
             >>> sensors = SensorSuite()

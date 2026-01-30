@@ -1,3 +1,5 @@
+# Ensure app.main is importable for tests and patching
+from . import main
 """
 ESP32 Live Steam Locomotive Controller
 DCC-controlled automation system for live steam model locomotives.

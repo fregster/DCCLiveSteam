@@ -1,12 +1,13 @@
+
+from typing import Dict
+import json
+import os
 # Minimum allowed margin between target and max boiler pressure (kPa, not user-configurable)
 PRESSURE_MARGIN_KPA = 15.0
 """
 Configuration management for ESP32 live steam locomotive control system.
 Handles CV storage, defaults, and hardware pin mappings.
 """
-from typing import Dict
-import json
-import os
 
 # --- HARDWARE CONSTANTS ---
 PWM_FREQ_HEATER = 5000
@@ -256,7 +257,7 @@ def validate_and_update_cv(cv_num: int, new_value: str, cv_table: Dict[int, any]
         return (False, f"CV{cv_num} invalid value '{new_value}' (not a number)")
 
     # Validate against bounds
-    if not (min_val <= parsed_value <= max_val):
+    if not min_val <= parsed_value <= max_val:
         return (False, f"CV{cv_num} out of range {min_val}-{max_val} {unit}")
 
     # Update CV table (atomic)

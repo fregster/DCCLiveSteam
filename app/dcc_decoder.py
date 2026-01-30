@@ -70,7 +70,6 @@ class DCCDecoder:
         """
         self.pin = Pin(PIN_DCC, Pin.IN)
         self.long_addr = (cv[29] & 0x20) != 0
-        
         # Calculate address based on addressing mode
         if self.long_addr:
             # Long addressing: ((CV17 & 0x3F) << 8) | CV18
@@ -78,7 +77,6 @@ class DCCDecoder:
         else:
             # Short addressing: CV1 (1-127)
             self.addr = cv.get(1, 0)
-        
         self.speed_128 = True
         self.current_speed = 0
         self.direction = 1

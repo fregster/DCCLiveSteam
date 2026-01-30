@@ -10,10 +10,10 @@ from .sensors import SensorSuite
 from .background_tasks import CachedSensorReader
 from .background_tasks import EncoderTracker
 from .physics import PhysicsEngine
-from .actuators.pressure_controller import PressureController
-from .actuators.servo import MechanicalMapper
-from .actuators.leds import FireboxLED, GreenStatusLED, StatusLEDManager
 from .actuators import Actuators
+from .actuators import MechanicalMapper
+from .actuators.leds import FireboxLED, GreenStatusLED, StatusLEDManager
+from .actuators.pressure_controller import PressureController
 from .safety import Watchdog
 from .ble_uart import BLE_UART
 from .managers.power_manager import PowerManager
@@ -38,7 +38,8 @@ class Locomotive:
 
     Args:
         cv: dict
-            Configuration variables (CVs) loaded from persistent storage (see docs/CV.md). Must include all required CVs for hardware, safety, and control parameters.
+            Configuration variables (CVs) loaded from persistent storage (see docs/CV.md). Must include all
+            required CVs for hardware, safety, and control parameters.
 
     Returns:
         None
@@ -70,7 +71,8 @@ class Locomotive:
 
         Args:
             cv: dict
-                Configuration variables (CVs) loaded from persistent storage. Must include all required CVs for hardware, safety, and control parameters (see docs/CV.md).
+                Configuration variables (CVs) loaded from persistent storage. Must include all required CVs for
+                hardware, safety, and control parameters (see docs/CV.md).
 
         Returns:
             None
@@ -99,9 +101,9 @@ class Locomotive:
         self.gc_manager = GarbageCollector()
 
         self.firebox_led = FireboxLED(
-            machine.Pin(self.cv.get('PIN_FIREBOX_LED', 12)), pwm=None)
+            machine.Pin(self.cv.get('PIN_FIREBOX_LED', 12)), None)
         self.green_led = GreenStatusLED(
-            machine.Pin(self.cv.get('PIN_GREEN_LED', 13)), pwm=None)
+            machine.Pin(self.cv.get('PIN_GREEN_LED', 13)), None)
         # BLE_UART expects cv and self.serial_queue for logging
         self.ble = BLE_UART(name=str(cv.get('BLE_NAME', 'LiveSteam')))
         self.status_reporter = StatusReporter(self.serial_queue)
@@ -128,7 +130,8 @@ class Locomotive:
         Logs an event to the in-memory event buffer for black box recovery.
 
         Why:
-            Maintains a rolling buffer of recent events (errors, warnings, state changes) for post-mortem analysis and safety audits. Ensures that critical events are not lost and can be written to flash on shutdown.
+            Maintains a rolling buffer of recent events (errors, warnings, state changes) for post-mortem analysis
+            and safety audits. Ensures that critical events are not lost and can be written to flash on shutdown.
 
         Args:
             event_type: str
