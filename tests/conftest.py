@@ -126,7 +126,7 @@ class MockUUID:
 
 # Install mocks before any imports
 mock_time_module = MockTime()
-sys.modules['machine'] = MockMachine
+sys.modules['machine'] = MockMachine()
 sys.modules['time'] = mock_time_module
 sys.modules['micropython'] = type('module', (), {'const': mock_const})()
 sys.modules['ubluetooth'] = type('module', (), {'BLE': lambda: None})()
