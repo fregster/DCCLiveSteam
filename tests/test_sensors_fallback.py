@@ -27,7 +27,9 @@ def test_sensor_suite_check_health_runtime():
     """
     sensors = SensorSuite()
     # Simulate runtime failure
-    sensors.speed_sensor = MagicMock(side_effect=Exception("fail"))
+    failing_mock = MagicMock()
+    failing_mock.update_encoder.side_effect = Exception("fail")
+    sensors.speed_sensor = failing_mock
     sensors.adc_pressure = MagicMock()
     with patch("app.sensors.read_pressure", side_effect=Exception("fail")):
         health = sensors.check_health()

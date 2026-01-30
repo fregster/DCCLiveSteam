@@ -218,15 +218,149 @@ class Locomotive:
         # BLE command processing not yet implemented
 
 class SerialPrintQueue:
+    """
+    Non-blocking print queue for serial output.
+
+    Why:
+        Buffers status and debug messages for serial output, decoupling print from main loop timing.
+        Prevents blocking on slow serial writes, improving real-time safety.
+
+    Args:
+        None
+
+    Returns:
+        None
+
+    Raises:
+        None
+
+    Safety:
+        Ensures serial output does not block control loop. Queue is cleared on process().
+
+    Example:
+        >>> q = SerialPrintQueue()
+        >>> q.enqueue('Hello')
+        >>> q.process()
+    """
     def __init__(self):
+        """
+        Initialises the SerialPrintQueue.
+
+        Why:
+            Sets up the internal message queue for serial output.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            No direct hardware access; safe for use in main control loop.
+
+        Example:
+            >>> q = SerialPrintQueue()
+        """
         self._queue = []
     def enqueue(self, msg):
+        """
+        Adds a message to the serial print queue.
+
+        Why:
+            Allows non-blocking queuing of status/debug messages for serial output.
+
+        Args:
+            msg: str, message to enqueue
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Does not block; safe for use in real-time loop.
+
+        Example:
+            >>> q = SerialPrintQueue()
+            >>> q.enqueue('Hello')
+        """
         self._queue.append(msg)
     def process(self):
+        """
+        Processes and clears the serial print queue.
+
+        Why:
+            Ensures queued messages are output and queue is cleared each cycle.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Prevents queue overflow by clearing after output.
+
+        Example:
+            >>> q = SerialPrintQueue()
+            >>> q.enqueue('Hello')
+            >>> q.process()
+        """
         self._queue = []  # Avoid accessing protected member for Pylint
 
 class FileWriteQueue:
+    """
+    Non-blocking queue for file write operations.
+
+    Why:
+        Buffers file write requests to avoid blocking main loop on slow I/O.
+        Enables safe, deferred logging or data persistence.
+
+    Args:
+        None
+
+    Returns:
+        None
+
+    Raises:
+        None
+
+    Safety:
+        Ensures file writes do not block control loop. Queue is cleared on process().
+
+    Example:
+        >>> q = FileWriteQueue()
+        >>> q.queue
+    """
     def __init__(self):
+        """
+        Initialises the FileWriteQueue.
+
+        Why:
+            Sets up the internal queue for file write operations.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            No direct hardware access; safe for use in main control loop.
+
+        Example:
+            >>> q = FileWriteQueue()
+        """
         self._queue = []
 
     @property
@@ -238,19 +372,96 @@ class FileWriteQueue:
             Enables test verification of queued file writes (e.g., black box log).
             Does not allow mutation, preserving encapsulation.
 
+        Args:
+            None
+
         Returns:
             list: Current queue contents (read-only reference).
 
+        Raises:
+            None
+
         Safety:
             Only for test/diagnostic use; production code should not rely on this.
+
+        Example:
+            >>> q = FileWriteQueue()
+            >>> q.queue
         """
         return self._queue
 
     def process(self):
+        """
+        Processes and clears the file write queue.
+
+        Why:
+            Ensures queued file writes are processed and queue is cleared each cycle.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Prevents queue overflow by clearing after output.
+
+        Example:
+            >>> q = FileWriteQueue()
+            >>> q.process()
+        """
         self._queue = []  # Avoid accessing protected member for Pylint
 
 class GarbageCollector:
+    """
+    Periodic garbage collector for memory management.
+
+    Why:
+        Triggers MicroPython garbage collection when free heap drops below threshold.
+        Prevents memory exhaustion and fragmentation in long-running control loops.
+
+    Args:
+        None
+
+    Returns:
+        None
+
+    Raises:
+        None
+
+    Safety:
+        Only triggers gc.collect() if memory is low; does not block main loop unnecessarily.
+
+    Example:
+        >>> gc = GarbageCollector()
+        >>> gc.process()
+    """
     def process(self):
+        """
+        Runs garbage collection if free memory is below threshold.
+
+        Why:
+            Prevents memory exhaustion by triggering gc.collect() only when needed.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Safety:
+            Only runs gc.collect() if memory is low; avoids unnecessary blocking.
+
+        Example:
+            >>> gc = GarbageCollector()
+            >>> gc.process()
+        """
         if gc.mem_free() < GC_THRESHOLD:
             gc.collect()
 

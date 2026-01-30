@@ -53,12 +53,14 @@ class SensorSuite:
 		Returns a dict of sensor health status.
 		"""
 		# Speed sensor
+		self.speed_sensor_available = False
 		try:
-			if self.speed_sensor:
+			if self.speed_sensor is not None:
 				_ = self.speed_sensor.update_encoder()
-			self.speed_sensor_available = True
+				self.speed_sensor_available = True
 		except Exception:
 			self.speed_sensor_available = False
+			self.speed_sensor = None
 		# Pressure sensor
 		try:
 			_ = read_pressure(self.adc_pressure)
@@ -73,19 +75,25 @@ class SensorSuite:
 
 	@property
 	def encoder_count(self):
-		return self.speed_sensor.encoder_count
+		if self.speed_sensor is not None:
+			return self.speed_sensor.encoder_count
+		return 0
 
 	@encoder_count.setter
 	def encoder_count(self, value):
-		self.speed_sensor.encoder_count = value
+		if self.speed_sensor is not None:
+			self.speed_sensor.encoder_count = value
 
 	@property
 	def encoder_last(self):
-		return self.speed_sensor.encoder_last
+		if self.speed_sensor is not None:
+			return self.speed_sensor.encoder_last
+		return 0
 
 	@encoder_last.setter
 	def encoder_last(self, value):
-		self.speed_sensor.encoder_last = value
+		if self.speed_sensor is not None:
+			self.speed_sensor.encoder_last = value
 		# Set ADC attenuation for 0-3.3V range
 		for adc in [self.adc_boiler, self.adc_super, self.adc_track, self.adc_pressure, self.adc_logic]:
 			adc.atten(ADC.ATTN_11DB)
