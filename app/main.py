@@ -18,6 +18,9 @@ from .managers.pressure_manager import PressureManager
 from .managers.speed_manager import SpeedManager
 from .status_utils import StatusReporter
 
+# Expose for test patching
+from app.background_tasks import CachedSensorReader as CachedSensorReader
+
 
 class Locomotive:
     """
