@@ -3,13 +3,15 @@
 Sensors package: pressure, speed, temperature, etc.
 Unified SensorSuite interface.
 """
-from machine import ADC, Pin
+from typing import Any
 from .pressure_sensor import read_pressure
 from .speed_sensor import SpeedSensor
 from .temperature_sensor import read_temps
 from .track_voltage_sensor import read_track_voltage
 from .health import is_reading_valid
 from ..config import PIN_BOILER, PIN_SUPER, PIN_TRACK, PIN_PRESSURE, PIN_LOGIC_TEMP, PIN_ENCODER, ADC_SAMPLES
+
+
 
 class SensorSuite:
 
@@ -22,20 +24,33 @@ class SensorSuite:
         - If pressure sensor is unavailable or fails, pressure_sensor_available is set False for manager fallback.
         - Temperature sensors are always required for safety; if they fail, system must shut down.
     """
-    def __init__(self):
-        self.adc_boiler = ADC(Pin(PIN_BOILER))
-        self.adc_super = ADC(Pin(PIN_SUPER))
-        self.adc_track = ADC(Pin(PIN_TRACK))
-        self.adc_pressure = ADC(Pin(PIN_PRESSURE))
-        self.adc_logic = ADC(Pin(PIN_LOGIC_TEMP))
+    def __init__(self, adc_factory: Any = None, pin_factory: Any = None, encoder_hw: Any = None):
+        """
+        Args:
+            adc_factory: Callable that returns an ADC abstraction given a pin number
+            pin_factory: Callable that returns a Pin abstraction given a pin number
+            encoder_hw: Hardware abstraction for encoder pin (ISensor)
+        """
+        if adc_factory is None or pin_factory is None:
+            raise ValueError("SensorSuite requires adc_factory and pin_factory abstractions.")
+        self.adc_boiler = adc_factory(pin_factory(PIN_BOILER))
+        self.adc_super = adc_factory(pin_factory(PIN_SUPER))
+        self.adc_track = adc_factory(pin_factory(PIN_TRACK))
+        self.adc_pressure = adc_factory(pin_factory(PIN_PRESSURE))
+        self.adc_logic = adc_factory(pin_factory(PIN_LOGIC_TEMP))
         # Sensor health flags
         self.speed_sensor_available = True
         self.pressure_sensor_available = True
         # Speed sensor init with health check
         try:
-            self.speed_sensor = SpeedSensor()
-            _ = self.speed_sensor.update_encoder()
-            self.encoder_pin = self.speed_sensor.encoder_pin
+            from app.sensors.speed_sensor import SpeedSensor
+            self.encoder_hw = encoder_hw
+            self.speed_sensor = SpeedSensor(self.encoder_hw) if self.encoder_hw else None
+            if self.speed_sensor:
+                _ = self.speed_sensor.update_encoder()
+                self.encoder_pin = getattr(self.speed_sensor, 'encoder_hw', None)
+            else:
+                self.encoder_pin = None
         except Exception:
             self.speed_sensor_available = False
             self.speed_sensor = None

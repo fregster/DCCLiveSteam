@@ -53,7 +53,7 @@ class Actuators:
         self.mech.set_goal(percent, direction, None)
         self.mech.update(None)
 
-    def safety_shutdown(self, cause):
+    def safety_shutdown(self):
         self.all_off()
         self.mech.emergency_mode = True
         # Optionally trigger LEDs, log, etc.

@@ -5,32 +5,46 @@ import pytest
 from unittest.mock import MagicMock
 from app.managers.power_manager import PowerManager
 
-class DummyLoco:
+
+# Mock Actuators interface for PowerManager tests
+class DummyActuators:
     def __init__(self):
-        self.cv = {51: 4.5}
-        self.pressure = MagicMock()
-        self.pressure.boiler_heater = MagicMock(_duty=1023)
-        self.pressure.super_heater = MagicMock(_duty=1023)
-        self.mech = MagicMock(current=100, target=0)
-        self.log_event = MagicMock()
-        self.die = MagicMock()
-        self.safety_shutdown = MagicMock()
+        self.boiler_pwm = 1023
+        self.superheater_pwm = 1023
+        self.servo_current = 100
+        self.servo_target = 0
+        self.set_boiler_duty_called = False
+        self.set_superheater_duty_called = False
+        self.set_servo_idle_called = False
+        self.safety_shutdown_called = False
+    def set_boiler_duty(self, value):
+        self.boiler_pwm = value
+        self.set_boiler_duty_called = True
+    def set_superheater_duty(self, value):
+        self.superheater_pwm = value
+        self.set_superheater_duty_called = True
+    def set_servo_idle(self):
+        self.set_servo_idle_called = True
+    def safety_shutdown(self, cause):
+        self.safety_shutdown_called = True
+
+
 
 @pytest.fixture
-def dummy_loco():
-    return DummyLoco()
+def dummy_actuators():
+    return DummyActuators()
 
-def test_estimate_total_current(dummy_loco):
-    pm = PowerManager(dummy_loco, {})
+def test_estimate_total_current(dummy_actuators):
+    pm = PowerManager(dummy_actuators, {})
     amps = pm.estimate_total_current()
     assert amps > 0
 
-def test_process_overcurrent_triggers_die(dummy_loco):
-    pm = PowerManager(dummy_loco, {})
-    dummy_loco.pressure.boiler_heater._duty = 1023
-    dummy_loco.pressure.super_heater._duty = 1023
-    dummy_loco.mech.current = 100
-    dummy_loco.mech.target = 0
+def test_process_overcurrent_triggers_safety_shutdown(dummy_actuators):
+    pm = PowerManager(dummy_actuators, {})
+    dummy_actuators.boiler_pwm = 1023
+    dummy_actuators.superheater_pwm = 1023
+    dummy_actuators.servo_current = 100
+    dummy_actuators.servo_target = 0
     pm.power_budget_amps = 0.1  # Force overcurrent
     pm.process()
-    dummy_loco.safety_shutdown.assert_called()
+    assert dummy_actuators.safety_shutdown_called

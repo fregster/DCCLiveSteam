@@ -4,8 +4,8 @@ Implements interrupt-driven bit decoding and packet parsing.
 """
 from typing import Dict
 import time
-from machine import Pin
 from .config import PIN_DCC, DCC_ONE_MIN, DCC_ONE_MAX, DCC_ZERO_MIN, DCC_ZERO_MAX
+from app.hardware_interfaces import ISensor
 
 class DCCDecoder:
     """
@@ -35,7 +35,7 @@ class DCCDecoder:
         >>> decoder.is_active()
         True
     """
-    def __init__(self, cv: Dict[int, any]) -> None:
+    def __init__(self, cv: Dict[int, any], pin: ISensor = None) -> None:
         """
         Initialise DCC decoder with address matching and interrupt handler.
 
@@ -68,7 +68,11 @@ class DCCDecoder:
             >>> decoder.addr
             100
         """
-        self.pin = Pin(PIN_DCC, Pin.IN)
+        # Accept pin abstraction for testability and hardware decoupling
+        if pin is not None:
+            self.pin = pin
+        else:
+            raise ValueError("DCCDecoder requires a pin abstraction implementing ISensor.")
         self.long_addr = (cv[29] & 0x20) != 0
         # Calculate address based on addressing mode
         if self.long_addr:
@@ -85,9 +89,11 @@ class DCCDecoder:
         self.last_valid = time.ticks_ms()
         self.bits = []
         self.last_edge = time.ticks_us()
-        self.pin.irq(trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING, handler=self._edge_handler)
+        # Attach IRQ handler if supported by abstraction (real hardware only)
+        if hasattr(self.pin, 'irq'):
+            self.pin.irq(trigger=getattr(self.pin, 'IRQ_RISING', None) | getattr(self.pin, 'IRQ_FALLING', None), handler=self._edge_handler)
 
-    def _edge_handler(self, pin: Pin) -> None:
+    def _edge_handler(self, pin) -> None:
         """
         ISR: Decodes DCC bit stream from edge timing.
 

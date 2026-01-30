@@ -31,7 +31,14 @@ def test_sensor_input_validation():
     """
     Tests that sensor input validation raises ValueError for out-of-range ADC.
     """
-    sensors = SensorSuite()
+    from unittest.mock import Mock
+    def mock_pin_factory(pin):
+        return Mock()
+    def mock_adc_factory(pin):
+        adc = Mock()
+        adc.read = Mock(return_value=2048)
+        return adc
+    sensors = SensorSuite(adc_factory=mock_adc_factory, pin_factory=mock_pin_factory, encoder_hw=Mock())
     with pytest.raises(ValueError):
         sensors._adc_to_temp(-1)
     with pytest.raises(ValueError):

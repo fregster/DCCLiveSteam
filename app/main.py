@@ -2,7 +2,7 @@
 
 import json
 import time
-import machine
+from app.hardware_interfaces import ISensor, IActuator
 import gc
 from .config import ensure_environment, load_cvs, GC_THRESHOLD, EVENT_BUFFER_SIZE
 from .dcc_decoder import DCCDecoder
@@ -90,8 +90,13 @@ class Locomotive:
         self.cv = cv
         self.event_buffer = []
         self.last_encoder = 0
-        self.cached_sensors = CachedSensorReader(SensorSuite())
-        self.dcc = DCCDecoder(cv)
+        from app.sensors.factories import EncoderHardware, DCCPinHardware, LEDHardware, adc_factory, pin_factory
+        self.encoder_tracker = EncoderTracker(
+            pin_encoder=EncoderHardware(self.cv.get('PIN_ENCODER', 14)))
+        self.cached_sensors = CachedSensorReader(
+            SensorSuite(adc_factory=adc_factory, pin_factory=pin_factory, encoder_hw=self.encoder_tracker)
+        )
+        self.dcc = DCCDecoder(cv, pin=DCCPinHardware(self.cv.get('PIN_DCC', 15)))
         self.physics = PhysicsEngine(cv)
         self.mech = MechanicalMapper(cv)
         self.pressure = PressureController(cv)
@@ -100,10 +105,9 @@ class Locomotive:
         self.file_queue = file_queue if file_queue is not None else FileWriteQueue()
         self.gc_manager = GarbageCollector()
 
-        self.firebox_led = FireboxLED(
-            machine.Pin(self.cv.get('PIN_FIREBOX_LED', 12)), None)
-        self.green_led = GreenStatusLED(
-            machine.Pin(self.cv.get('PIN_GREEN_LED', 13)), None)
+        from app.actuators.leds import GreenStatusLED, FireboxLED
+        self.firebox_led = FireboxLED(LEDHardware(self.cv.get('PIN_FIREBOX_LED', 12)))
+        self.green_led = GreenStatusLED(LEDHardware(self.cv.get('PIN_GREEN_LED', 13)))
         # BLE_UART expects cv and self.serial_queue for logging
         self.ble = BLE_UART(name=str(cv.get('BLE_NAME', 'LiveSteam')))
         self.status_reporter = StatusReporter(self.serial_queue)
@@ -114,9 +118,9 @@ class Locomotive:
         self.status_led_manager = StatusLEDManager(self.green_led)
         self.pressure_manager = PressureManager(self.actuators, cv)
         self.power_manager = PowerManager(self.actuators, cv)
-        # Instantiate EncoderTracker for speed sensing
+        # Instantiate EncoderTracker for speed sensing using imported abstraction
         self.encoder_tracker = EncoderTracker(
-            pin_encoder=machine.Pin(self.cv.get('PIN_ENCODER', 14)))
+            pin_encoder=EncoderHardware(self.cv.get('PIN_ENCODER', 14)))
         self.speed_manager = SpeedManager(
             self.actuators, cv, speed_sensor=self.encoder_tracker.get_velocity_cms)
         self.emergency_mode = False
@@ -212,6 +216,7 @@ class Locomotive:
         time.sleep(0.5)
         self.mech.servo.duty(0)
         if not force_close_only:
+            import machine
             machine.deepsleep()
 
     def process_ble_commands(self):

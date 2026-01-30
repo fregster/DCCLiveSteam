@@ -8,7 +8,19 @@ Bit timing accuracy (<5µs tolerance) required for reliable packet decode.
 import pytest
 import time
 from unittest.mock import patch
+
 from app.dcc_decoder import DCCDecoder
+from app.hardware_interfaces import ISensor
+
+# Minimal mock ISensor for DCC pin
+class MockPin(ISensor):
+    def read(self):
+        return 1
+    def irq(self, trigger, handler):
+        # This is a mock for hardware pin interrupts; no-op for unit testing.
+        pass
+    IRQ_RISING = 1
+    IRQ_FALLING = 2
 
 
 @pytest.fixture
@@ -20,7 +32,7 @@ def cv_short_addr():
 @pytest.fixture
 def cv_long_addr():
     """CV table for long address 1234."""
-    return {1: 3, 29: 0x20, 17: 0xC4, 18: 0xD2}  # (0xC4 & 0x3F)<<8 | 0xD2 = 1234
+    return {1: 3, 29: 0x20, 17: 0xC4, 18: 0xD2}
 
 
 def test_decoder_initialisation_short_address(cv_short_addr):
@@ -33,7 +45,7 @@ def test_decoder_initialisation_short_address(cv_short_addr):
     Safety: Incorrect address causes decoder to ignore all DCC packets,
     leaving locomotive uncontrolled.
     """
-    decoder = DCCDecoder(cv_short_addr)
+    decoder = DCCDecoder(cv_short_addr, pin=MockPin())
     assert decoder.addr == 3
     assert decoder.long_addr is False
     assert decoder.speed_128 is True
@@ -50,7 +62,7 @@ def test_decoder_initialisation_long_address(cv_long_addr):
     Safety: Address calculation must match NMRA standard exactly or decoder
     will respond to wrong locomotive's packets.
     """
-    decoder = DCCDecoder(cv_long_addr)
+    decoder = DCCDecoder(cv_long_addr, pin=MockPin())
     assert decoder.addr == 1234  # (0xC4 & 0x3F) << 8 | 0xD2
     assert decoder.long_addr is True
 
@@ -65,7 +77,7 @@ def test_bit_timing_one_bit(cv_short_addr):
     Safety: Incorrect bit decoding causes speed command misinterpretation,
     potentially causing collision or runaway.
     """
-    decoder = DCCDecoder(cv_short_addr)
+    decoder = DCCDecoder(cv_short_addr, pin=MockPin())
     decoder.last_edge = 0
     
     # Simulate 58µs edge (1-bit nominal)
@@ -84,7 +96,7 @@ def test_bit_timing_zero_bit(cv_short_addr):
     
     Safety: Zero-bit errors corrupt packet data, especially address bytes.
     """
-    decoder = DCCDecoder(cv_short_addr)
+    decoder = DCCDecoder(cv_short_addr, pin=MockPin())
     decoder.last_edge = 0
     
     # Simulate 100µs edge (0-bit nominal)
@@ -104,7 +116,7 @@ def test_invalid_timing_clears_buffer(cv_short_addr):
     
     Safety: Parsing corrupted packets could decode random speed commands.
     """
-    decoder = DCCDecoder(cv_short_addr)
+    decoder = DCCDecoder(cv_short_addr, pin=MockPin())
     decoder.bits = [1, 0, 1, 0]  # Pre-populate buffer
     decoder.last_edge = 0
     
@@ -125,7 +137,7 @@ def test_address_filtering_rejects_wrong_address(cv_short_addr):
     Safety: Without filtering, locomotive would respond to every speed command
     on layout, causing unpredictable behavior.
     """
-    decoder = DCCDecoder(cv_short_addr)
+    decoder = DCCDecoder(cv_short_addr, pin=MockPin())
     
     # Packet for address 5 (not 3): [0x05, 0xBF, 0x40]
     # Bits: 00000101 1 10111111 1 01000000 1
@@ -149,7 +161,7 @@ def test_speed_command_128_step_forward(cv_short_addr):
     
     Safety: Direction bit critical - wrong direction causes head-on collision.
     """
-    decoder = DCCDecoder(cv_short_addr)
+    decoder = DCCDecoder(cv_short_addr, pin=MockPin())
     
     # Packet for address 3, speed 64, forward: [0x03, 0xBF, 0x40]
     # 0xBF = 0b10111111 (speed cmd, forward, speed_high=31)
@@ -176,7 +188,7 @@ def test_speed_command_reverse_direction(cv_short_addr):
     
     Safety: Direction reversal under power can cause derailment or collision.
     """
-    decoder = DCCDecoder(cv_short_addr)
+    decoder = DCCDecoder(cv_short_addr, pin=MockPin())
     
     # Speed command with direction=0 (reverse): 0b01011111 = 0x5F
     decoder.bits = [0,0,0,0,0,0,1,1, 1,  # Address 3
@@ -198,7 +210,7 @@ def test_function_command_whistle(cv_short_addr):
     Safety: Whistle activation opens regulator to CV48 position without speed
     command, providing sound effect without locomotion.
     """
-    decoder = DCCDecoder(cv_short_addr)
+    decoder = DCCDecoder(cv_short_addr, pin=MockPin())
     
     # Function Group 1 with F0=1: 0b10010001 = 0x91
     decoder.bits = [0,0,0,0,0,0,1,1, 1,  # Address 3
@@ -217,7 +229,7 @@ def test_function_command_whistle_off(cv_short_addr):
     
     Safety: Stuck whistle wastes boiler pressure and can stall locomotive.
     """
-    decoder = DCCDecoder(cv_short_addr)
+    decoder = DCCDecoder(cv_short_addr, pin=MockPin())
     decoder.whistle = True
     
     # Function Group 1 with F0=0: 0b10000000 = 0x80
@@ -239,7 +251,7 @@ def test_is_active_true_recent_packet(cv_short_addr):
     Safety: False positive (reporting active when signal lost) prevents emergency
     shutdown. Timeout must be conservative.
     """
-    decoder = DCCDecoder(cv_short_addr)
+    decoder = DCCDecoder(cv_short_addr, pin=MockPin())
     decoder.last_valid = time.ticks_ms()
     
     assert decoder.is_active() is True
@@ -255,7 +267,7 @@ def test_is_active_false_timeout(cv_short_addr):
     Safety: Timeout too short causes spurious shutdowns. Timeout too long delays
     response to actual signal loss, allowing locomotive to coast.
     """
-    decoder = DCCDecoder(cv_short_addr)
+    decoder = DCCDecoder(cv_short_addr, pin=MockPin())
     decoder.last_valid = time.ticks_ms() - 600  # 600ms ago
     
     assert decoder.is_active() is False
@@ -271,7 +283,7 @@ def test_malformed_packet_ignored(cv_short_addr):
     Safety: Decoder crash leaves locomotive unresponsive to valid packets,
     requiring power cycle to recover.
     """
-    decoder = DCCDecoder(cv_short_addr)
+    decoder = DCCDecoder(cv_short_addr, pin=MockPin())
     initial_speed = decoder.current_speed
     
     # Packet too short (only 2 bytes)
@@ -294,7 +306,7 @@ def test_long_address_packet_decode(cv_long_addr):
     Safety: Long address decoding must match NMRA S-9.2.1 exactly or decoder
     will ignore all packets.
     """
-    decoder = DCCDecoder(cv_long_addr)
+    decoder = DCCDecoder(cv_long_addr, pin=MockPin())
     
     # Packet for address 1234: [0xC4, 0xD2, 0xBF, 0x40]
     # 0xC4 = 0b11000100, 0xD2 = 0b11010010 -> (0x04 << 8) | 0xD2 = 1234
@@ -317,7 +329,7 @@ def test_speed_zero_command(cv_short_addr):
     
     Safety: Speed=0 must reliably stop locomotive, not just reduce speed.
     """
-    decoder = DCCDecoder(cv_short_addr)
+    decoder = DCCDecoder(cv_short_addr, pin=MockPin())
     decoder.current_speed = 64  # Currently moving
     
     # Speed=0 command: 0b10100000 = 0xA0
@@ -340,7 +352,7 @@ def test_packet_buffer_minimum_length(cv_short_addr):
     
     Safety: Processing incomplete packets could decode random data as speed commands.
     """
-    decoder = DCCDecoder(cv_short_addr)
+    decoder = DCCDecoder(cv_short_addr, pin=MockPin())
     initial_speed = decoder.current_speed
     
     # Only 16 bits (2 bytes incomplete)
@@ -383,7 +395,7 @@ def test_irq_handler_attached(cv_short_addr):
     Safety: Missing IRQ attachment leaves decoder non-functional, causing signal
     loss timeout and emergency shutdown.
     """
-    decoder = DCCDecoder(cv_short_addr)
+    decoder = DCCDecoder(cv_short_addr, pin=MockPin())
     
     # Verify pin configured with IRQ
     assert decoder.pin is not None

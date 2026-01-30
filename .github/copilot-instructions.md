@@ -421,7 +421,18 @@ Ongoing session development?
 
 ## 🎯 Development Workflow
 
-**System Note:** The local development system (macOS) uses `python3` command rather than `python`. When running Python commands in the terminal, use `python3` explicitly (e.g., `python3 -m pytest`, `python3 -m pylint`). The virtual environment (`.venv/bin/python`) uses the correct interpreter automatically.
+
+
+**System Note:**
+- ALWAYS use the project virtual environment Python interpreter for all Python commands:
+    `/Users/pfrye/git/DCCLiveSteam/.venv/bin/python`
+- On macOS, if the virtual environment is not present, try `python3` first (never plain `python`).
+- All test, lint, and script commands must use the `.venv` interpreter path if available.
+- Never ask the user about the Python environment—assume `.venv` is present and correct unless proven otherwise.
+- If you need to run pytest, pylint, or any Python script, use:
+    `/Users/pfrye/git/DCCLiveSteam/.venv/bin/python -m pytest ...`
+    `/Users/pfrye/git/DCCLiveSteam/.venv/bin/python -m pylint ...`
+    and so on.
 
 ### **1. Before Writing Code**
 - Read relevant user documentation in `docs/`
