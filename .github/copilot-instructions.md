@@ -33,7 +33,7 @@ This code controls a **live steam locomotive** with:
     - Use descriptive variable names and type hints
     - No bare except: always specify exception types
     - No duplicate code blocks
-    - All code must be formatted and structured to pass pylint with a score ≥ 9.0/10 before running or writing tests
+    - All code must be formatted and structured to pass pylint with a score ≥ 9.5/10 before running or writing tests
 
 2. **Test-First Development**
     - Write unit tests in `tests/` before implementing new logic
@@ -44,7 +44,7 @@ This code controls a **live steam locomotive** with:
     - Boundary values, invalid inputs, failure modes
 
 4. **Strict Linting and Coverage:**
-    - Pylint score ≥ 9.0/10 (no errors, only minor style warnings permitted)
+    - Pylint score ≥ 9.5/10 (no errors, only minor style warnings permitted)
     - Type hints required for all functions
     - Cognitive complexity ≤ 15 per function
     - Test coverage ≥ 85%

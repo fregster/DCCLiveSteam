@@ -1,8 +1,6 @@
 import time
-import pytest
-from unittest.mock import MagicMock
 from app.background_tasks.ble_telemetry_task import BLETelemetryTask
-
+ 
 class DummyBLE:
     def __init__(self):
         self.sent = []

@@ -137,6 +137,15 @@ sys.modules['bluetooth'] = type('module', (), {
     'FLAG_WRITE': 2
 })()
 
+mock_modules = [
+    'machine',
+    'micropython',
+    'bluetooth',
+]
+for mod in mock_modules:
+    if mod not in sys.modules:
+        sys.modules[mod] = mock.MagicMock()
+
 # Mock gc module for memory management
 sys.modules['gc'] = type('module', (), {
     'collect': lambda: None,

@@ -2,7 +2,6 @@
 Unit tests for SpeedManager fallback and degraded mode.
 """
 import pytest
-from unittest.mock import MagicMock
 from app.managers.speed_manager import SpeedManager
 
 class DummyActuators:

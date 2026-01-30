@@ -1,4 +1,3 @@
-import contextlib
 # Patch Watchdog globally for all tests that instantiate Locomotive or run
 import pytest
 from unittest.mock import patch
@@ -31,10 +30,7 @@ Why: Main orchestrator coordinates all subsystems. Integration tests verify
 sensor→physics→actuator pipeline functions correctly.
 """
 import pytest
-import json
-import time
-import sys
-from unittest.mock import Mock, MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch, mock_open
 
 
 

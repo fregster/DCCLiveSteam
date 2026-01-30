@@ -74,7 +74,6 @@ class DCCDecoder:
         # Calculate address based on addressing mode
         if self.long_addr:
             # Long addressing: ((CV17 & 0x3F) << 8) | CV18
-            # Valid range 128-10239
             self.addr = ((cv.get(17, 0) & 0x3F) << 8) | cv.get(18, 0)
         else:
             # Short addressing: CV1 (1-127)

@@ -26,6 +26,7 @@ from .status_utils import StatusReporter
 class Locomotive:
     """
 
+
     Main orchestrator for the live steam locomotive control system.
 
     Why:
@@ -46,8 +47,9 @@ class Locomotive:
         ValueError: If required CVs are missing or invalid during initialisation.
 
     Safety:
-        - All safety shutdowns are routed through die().
-        - Event buffer logs all critical events for black box recovery.
+
+                - All safety shutdowns are routed through die().
+                - Event buffer logs all critical events for black box recovery.
                 - Instantiates watchdog, servo slew-rate, and thermal/pressure limits as per
                     CVs.
                 - Emergency mode disables all actuators and enters deep sleep if required.
@@ -61,7 +63,10 @@ class Locomotive:
         Initialises all subsystems and hardware interfaces for the locomotive.
 
         Why:
-            Sets up all required modules (DCC, sensors, actuators, safety, BLE, logging) and prepares the event buffer and emergency state. Ensures all hardware and safety-critical logic is ready before entering the control loop.
+
+            Sets up all required modules (DCC, sensors, actuators, safety, BLE, logging)
+            and prepares the event buffer and emergency state. Ensures all hardware and
+            safety-critical logic is ready before entering the control loop.
 
         Args:
             cv: dict
@@ -92,20 +97,26 @@ class Locomotive:
         self.serial_queue = SerialPrintQueue()
         self.file_queue = file_queue if file_queue is not None else FileWriteQueue()
         self.gc_manager = GarbageCollector()
-        self.firebox_led = FireboxLED(machine.Pin(self.cv.get('PIN_FIREBOX_LED', 12)), pwm=None)
-        self.green_led = GreenStatusLED(machine.Pin(self.cv.get('PIN_GREEN_LED', 13)), pwm=None)
+
+        self.firebox_led = FireboxLED(
+            machine.Pin(self.cv.get('PIN_FIREBOX_LED', 12)), pwm=None)
+        self.green_led = GreenStatusLED(
+            machine.Pin(self.cv.get('PIN_GREEN_LED', 13)), pwm=None)
         # BLE_UART expects cv and self.serial_queue for logging
         self.ble = BLE_UART(name=str(cv.get('BLE_NAME', 'LiveSteam')))
         self.status_reporter = StatusReporter(self.serial_queue)
         # Actuators interface (to be implemented in actuators.py or as a composite class)
         self.actuators = Actuators(self.mech, self.green_led, self.firebox_led)
-        self.telemetry_manager = TelemetryManager(self.ble, self.actuators, self.status_reporter)
+        self.telemetry_manager = TelemetryManager(
+            self.ble, self.actuators, self.status_reporter)
         self.status_led_manager = StatusLEDManager(self.green_led)
         self.pressure_manager = PressureManager(self.actuators, cv)
         self.power_manager = PowerManager(self.actuators, cv)
         # Instantiate EncoderTracker for speed sensing
-        self.encoder_tracker = EncoderTracker(pin_encoder=machine.Pin(self.cv.get('PIN_ENCODER', 14)))
-        self.speed_manager = SpeedManager(self.actuators, cv, speed_sensor=self.encoder_tracker.get_velocity_cms)
+        self.encoder_tracker = EncoderTracker(
+            pin_encoder=machine.Pin(self.cv.get('PIN_ENCODER', 14)))
+        self.speed_manager = SpeedManager(
+            self.actuators, cv, speed_sensor=self.encoder_tracker.get_velocity_cms)
         self.emergency_mode = False
 
         # Remove old PowerMonitor
@@ -139,7 +150,11 @@ class Locomotive:
             >>> loco.log_event('ERROR', {'code': 42, 'msg': 'Overheat'})
         """
         t = time.ticks_ms()
-        self.event_buffer.append({"type": event_type, "data": data, "t": t})
+        self.event_buffer.append({
+            "type": event_type,
+            "data": data,
+            "t": t
+        })
         if len(self.event_buffer) > EVENT_BUFFER_SIZE:
             self.event_buffer = self.event_buffer[-EVENT_BUFFER_SIZE:]
 
@@ -148,7 +163,10 @@ class Locomotive:
         Initiates a safety shutdown, disables all actuators, logs the event, and enters emergency mode.
 
         Why:
-            Provides a single, auditable path for all emergency shutdowns (thermal, pressure, signal loss, E-STOP). Ensures all actuators are secured, heaters are disabled, and a black box log is written to flash before entering deep sleep or emergency state.
+
+            Provides a single, auditable path for all emergency shutdowns (thermal, pressure, signal loss, E-STOP).
+            Ensures all actuators are secured, heaters are disabled, and a black box log is written to flash before
+            entering deep sleep or emergency state.
 
         Args:
             cause: str

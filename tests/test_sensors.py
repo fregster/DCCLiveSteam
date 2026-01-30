@@ -1,9 +1,10 @@
+from unittest.mock import Mock
+import pytest
 """
 Unit tests for sensors.py module.
 Tests ADC reading, temperature conversion, and encoder tracking.
 """
-import pytest
-from unittest.mock import Mock, MagicMock, patch
+ 
 from app.sensors import SensorSuite
 
 

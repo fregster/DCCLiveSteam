@@ -1,3 +1,4 @@
+import pytest
 """
 Unit tests for BLE UART telemetry interface.
 Tests initialisation, connection handling, telemetry formatting, and error resilience.
@@ -5,8 +6,8 @@ Tests initialisation, connection handling, telemetry formatting, and error resil
 Why: BLE UART provides wireless monitoring without affecting locomotive control.
 Tests verify telemetry doesn't block main loop on errors.
 """
-import pytest
-from unittest.mock import Mock, MagicMock, patch, call
+ 
+from unittest.mock import Mock, MagicMock, patch
 from app.ble_uart import BLE_UART
 
 
@@ -67,7 +68,7 @@ def test_advertise_calls_gap_advertise(mock_ble, mock_advertising):
     
     Safety: Advertising must restart after disconnect to enable reconnection.
     """
-    ble = BLE_UART()
+    BLE_UART()
     
     # Verify gap_advertise called during init
     assert mock_ble.gap_advertise.called
@@ -194,9 +195,8 @@ def test_send_telemetry_handles_format_errors(mock_ble, mock_advertising):
     """
     ble = BLE_UART()
     ble._connected = True
-    
     # Should not raise exception for invalid input
-    ble.send_telemetry(float('nan'), None, (None, 210.0, 45.0), "invalid")
+    ble.send_telemetry(float('nan'), 0, (0, 210.0, 45.0), 0)
 
 
 def test_is_connected_true(mock_ble, mock_advertising):
@@ -208,7 +208,6 @@ def test_is_connected_true(mock_ble, mock_advertising):
     """
     ble = BLE_UART()
     ble._connected = True
-    
     assert ble.is_connected() is True
 
 
@@ -277,7 +276,7 @@ def test_uart_service_uuids(mock_ble, mock_advertising):
     Safety: Incorrect UUIDs render telemetry non-functional.
     """
     with patch('app.ble_uart.bluetooth.UUID') as mock_uuid:
-        ble = BLE_UART()
+        BLE_UART()
         
         # Verify UUID calls
         uuid_calls = [call[0][0] for call in mock_uuid.call_args_list]

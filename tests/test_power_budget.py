@@ -2,9 +2,7 @@
 Unit test for power budget enforcement (CV51).
 """
 
-import pytest
 from unittest.mock import patch
-from app.main import Locomotive
 
 def test_power_budget_enforcement_reduces_load(monkeypatch):
     """

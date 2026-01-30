@@ -185,17 +185,16 @@ class SensorSuite:
         if sensor_type == "boiler_temp":
             # Valid range: 0°C to 150°C (boiler operating range)
             return 0 <= reading <= 150
-        elif sensor_type == "super_temp":
+        if sensor_type == "super_temp":
             # Valid range: 0°C to 280°C (superheater, very hot)
             return 0 <= reading <= 280
-        elif sensor_type == "logic_temp":
+        if sensor_type == "logic_temp":
             # Valid range: 0°C to 100°C (TinyPICO die temperature)
             return 0 <= reading <= 100
-        elif sensor_type == "pressure":
+        if sensor_type == "pressure":
             # Valid range: -1 PSI to 30 PSI (atmosphere to safety relief)
             return -1 <= reading <= 30
-        else:
-            return False
+        return False
 
     def read_temps(self) -> Tuple[float, float, float]:
         """

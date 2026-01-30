@@ -1,8 +1,8 @@
+from app.actuators import servo
 """
 Memory management and object reuse tests for safety-critical embedded system.
 Ensures heap usage is controlled and objects are reused in control loops.
 """
-import pytest
 import gc
 import unittest.mock
 from app.sensors import SensorSuite
@@ -20,9 +20,9 @@ def test_gc_mem_free_margin():
     with unittest.mock.patch.object(gc, 'mem_free', side_effect=lambda *args, **kwargs: 20000), \
          unittest.mock.patch.object(gc, 'collect', side_effect=lambda *args, **kwargs: None):
         gc.collect()
-        before = gc.mem_free()
-        sensors = [SensorSuite() for _ in range(10)]
-        mappers = [MechanicalMapper({46:77,47:128,49:1000}) for _ in range(10)]
+        gc.mem_free()
+        [SensorSuite() for _ in range(10)]
+        [MechanicalMapper({46:77,47:128,49:1000}) for _ in range(10)]
         gc.collect()
         after = gc.mem_free()
         assert after > 10_000, f"Heap memory too low: {after} bytes"

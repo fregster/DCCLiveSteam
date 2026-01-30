@@ -11,7 +11,6 @@ def test_cv():
         33: 35.0   # Target pressure PSI
     }
 
-from unittest.mock import MagicMock, patch
 from app.actuators.pressure_controller import PressureController
 
 def test_pressure_controller_initialisation(test_cv):
@@ -22,11 +21,9 @@ def test_pressure_controller_initialisation(test_cv):
     """
     controller = PressureController(test_cv)
     
-    assert controller.target_psi == 35.0
-    assert controller.integral == 0.0
-    assert controller.last_error == 0.0
-
-
+    assert abs(controller.target_psi - 35.0) < 1e-6
+    assert abs(controller.integral - 0.0) < 1e-6
+    assert abs(controller.last_error - 0.0) < 1e-6
 def test_pid_proportional_response(test_cv):
     """
     Tests PID controller responds proportionally to error.

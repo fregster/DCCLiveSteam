@@ -175,7 +175,6 @@ class BLE_UART:
             self._telemetry_buffer = None
             self._telemetry_pending = False
             return
-        
         try:
             # Format telemetry packet (non-blocking, <1ms)
             data = (f"SPD:{speed:.1f}|PSI:{psi:.1f}|TB:{temps[0]:.1f}|"
@@ -215,7 +214,6 @@ class BLE_UART:
         """
         if not self._telemetry_pending or not self._telemetry_buffer:
             return
-        
         try:
             self.send(self._telemetry_buffer)
             self._telemetry_pending = False

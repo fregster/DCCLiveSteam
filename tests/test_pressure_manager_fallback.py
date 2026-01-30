@@ -1,7 +1,6 @@
 """
 Unit tests for PressureManager fallback and degraded mode.
 """
-import pytest
 from app.managers.pressure_manager import PressureManager
 
 class DummyHeaterActuators:
@@ -15,7 +14,6 @@ class DummyHeaterActuators:
         self.superheater_duty = value
     def all_off(self):
         self.all_off_called = True
-
 def test_pressure_manager_fallback_to_temp_only():
     """
     If pressure sensor is unavailable or fails, PressureManager should use temp-only fallback logic.

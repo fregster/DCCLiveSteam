@@ -7,7 +7,7 @@ Bit timing accuracy (<5µs tolerance) required for reliable packet decode.
 """
 import pytest
 import time
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import patch
 from app.dcc_decoder import DCCDecoder
 
 

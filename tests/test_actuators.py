@@ -1,4 +1,3 @@
-import pytest
 from app.actuators import Actuators
 
 class DummyMech:

@@ -1,8 +1,8 @@
 """
 Temperature sensor ADC reading and conversion logic.
 """
-from machine import ADC, Pin
-from ..config import PIN_BOILER, PIN_SUPER, PIN_LOGIC_TEMP, ADC_SAMPLES
+from machine import ADC
+from ..config import ADC_SAMPLES
 import math
 
 def _read_adc(adc: ADC) -> int:

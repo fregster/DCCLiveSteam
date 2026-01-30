@@ -4,8 +4,6 @@ Tests configuration management and CV persistence.
 """
 import pytest
 import json
-import os
-from pathlib import Path
 from app.config import ensure_environment, load_cvs, save_cvs, CV_DEFAULTS
 
 

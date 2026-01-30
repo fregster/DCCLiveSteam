@@ -1,7 +1,6 @@
 """
 Unit tests for SensorSuite health check and degraded mode flags.
 """
-import pytest
 from unittest.mock import patch, MagicMock
 from app.sensors import SensorSuite
 

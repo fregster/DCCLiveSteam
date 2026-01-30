@@ -8,7 +8,6 @@ Provides:
 
 British English spelling and terminology enforced.
 """
-import time
 from machine import Pin, PWM
 
 class BoilerHeaterPWM:

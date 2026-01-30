@@ -27,7 +27,6 @@ def test_pressure_manager_fallback_temp_only():
     actuators.set_boiler_duty.assert_called_with(0)
     actuators.set_superheater_duty.assert_called_with(0)
 
-import pytest
 from app.managers.pressure_manager import PressureManager
 from unittest.mock import MagicMock
 

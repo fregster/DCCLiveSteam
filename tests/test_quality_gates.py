@@ -4,11 +4,11 @@ Ensures code quality gates are enforced (Pylint ≥9.0/10, coverage ≥85%).
 """
 
 import subprocess
-import pytest
 import os
 import sys
 
-def _venv_bin(cmd):
+
+def venv_path(cmd):
     venv_bin = os.path.dirname(sys.executable)
     return os.path.join(venv_bin, cmd)
 
@@ -22,7 +22,7 @@ def test_pylint_score():
         AssertionError: If any file scores below 9.0
     """
     app_dir = os.path.join(os.path.dirname(__file__), '../app')
-    pylint_path = _venv_bin('pylint')
+    pylint_path = venv_path('pylint')
     for fname in os.listdir(app_dir):
         if fname.endswith('.py') and fname != '__init__.py':
             path = os.path.join(app_dir, fname)
@@ -42,7 +42,7 @@ def test_coverage():
     Raises:
         AssertionError: If coverage is below 85%
     """
-    coverage_path = _venv_bin('coverage')
+    coverage_path = venv_path('coverage')
     result = subprocess.run([coverage_path, 'report', '-m'], capture_output=True, text=True)
     for line in result.stdout.splitlines():
         if 'TOTAL' in line:

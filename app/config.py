@@ -175,7 +175,10 @@ CV_BOUNDS = {
     30: (0, 1, "bool", "Distress whistle enable"),
     31: (-50, 50, "pwm", "Servo offset"),
     32: (70.0, 207.0, "kPa", "Target pressure (user, kPa; default 124 kPa; 18.0 PSI reference)",),
-    35: (100.0, 220.0, "kPa", "Max boiler pressure (user, kPa; default 207 kPa; 30 PSI reference, Hornby safety valve)"),
+    35: (
+        100.0, 220.0, "kPa",
+        "Max boiler pressure (user, kPa; default 207 kPa; 30 PSI reference, Hornby safety valve)"
+    ),
     33: (10.0, 50.0, "%", "Stiction breakout"),
     34: (5.0, 30.0, "%", "Slip sensitivity"),
     37: (1000, 2000, "mm*100", "Wheel radius"),

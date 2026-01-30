@@ -1,3 +1,4 @@
+from app.actuators import heater
 import pytest
 from unittest.mock import MagicMock, patch
 

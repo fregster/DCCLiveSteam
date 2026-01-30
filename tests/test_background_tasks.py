@@ -6,7 +6,7 @@ without blocking 50Hz control loop. Tests verify non-blocking behavior, queue li
 rate limiting, and graceful degradation.
 """
 import unittest
-from unittest.mock import Mock, patch, mock_open, call
+from unittest.mock import Mock, patch, mock_open
 import time
 from app.background_tasks import (SerialPrintQueue, FileWriteQueue, GarbageCollector,
                                   CachedSensorReader, EncoderTracker)

@@ -123,7 +123,11 @@ class FireboxLED:
         self.code = 0
 
     def set_error(self, code: int):
-        """Set error state: solid red for 5s, then flash red N times (N=code), repeat if error persists. ...existing docstring..."""
+        """
+        Set error state: solid red for 5s, then flash red N times (N=code).
+        Repeat if error persists.
+        ...existing docstring...
+        """
         self.state = 'red'
         self.code = code
         self.solid_start = time.ticks_ms()
@@ -132,7 +136,11 @@ class FireboxLED:
         self.flash_on = False
 
     def set_warning(self, code: int):
-        """Set warning state: solid orange for 5s, then flash orange N times (N=code), repeat if warning persists. ...existing docstring..."""
+        """
+        Set warning state: solid orange for 5s, then flash orange N times (N=code).
+        Repeat if warning persists.
+        ...existing docstring...
+        """
         if self.state != 'red':
             self.state = 'orange'
             self.code = code
