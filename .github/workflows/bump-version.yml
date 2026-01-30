@@ -1,0 +1,29 @@
+name: Auto Bump Version on Release
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  bump-version:
+    name: Bump Version Number
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Bump version in app/__init__.py
+        run: |
+          python .github/scripts/bump_version.py
+      - name: Commit and push version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app/__init__.py
+          git commit -m "ci: bump version for release [skip ci]" || echo "No changes to commit"
+          git push

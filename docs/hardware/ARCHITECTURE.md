@@ -6,7 +6,10 @@
 # 1. System Architecture
 
 ## 1.1 Concept of Operations
+
 This is a distributed control system for live-steam locomotives. It separates sensitive logic and signal processing (Tender) from high-heat actuation and environment sensing (Locomotive).
+
+**Controller Board:** All references to the control MCU now refer to the Pimoroni TinyPICO ESP32 (ESP32-PICO-D4), 4MB flash, 520KB SRAM, 3.3V logic, USB-C, and LiPo support. See TENDER_HW.md for details.
 
 **Model-specific note (no firebox):**
 * This is a model with **no real firebox**. All heat is generated electrically in the boiler and the superheater.
@@ -17,9 +20,12 @@ This is a distributed control system for live-steam locomotives. It separates se
 * Steam passes through the **steam pipe** to the **locomotive superheater**.
 * From the superheater, steam continues to the **steam chest/steambox** and cylinders.
 
+
 **Hornby Live Steam layout:**
 * **Tender:** Boiler, keep-alive supercapacitors, boiler thermocouple, water level sensor, and power MOSFETs
 * **Locomotive:** Superheater, regulator servo, superheater thermocouple, pressure sensor, and odometry sensor
+
+**MCU Note:** The system is now standardised on the Pimoroni TinyPICO ESP32 (ESP32-PICO-D4) board. All GPIO, power, and logic references are to this board unless otherwise specified.
 
 
 

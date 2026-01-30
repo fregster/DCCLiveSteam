@@ -54,7 +54,10 @@ ESP32 GPIO ──[100Ω]──┬─ MOSFET Gate
 # 3. Locomotive Hardware Specification
 
 ## 3.1 Actuation & Thermal Module
+
 The Locomotive houses the physical components required for steam regulation and environmental monitoring. The superheater is electrically heated, and steam arrives from the tender boiler via the steam pipe.
+
+**MCU Note:** All references to the control board refer to the Pimoroni TinyPICO ESP32 (ESP32-PICO-D4), 3.3V logic, USB-C, and LiPo support. Pin mapping and logic are as per TENDER_HW.md.
 
 | Component | Specification | Purpose |
 | :--- | :--- | :--- |

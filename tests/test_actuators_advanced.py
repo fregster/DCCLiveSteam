@@ -1,8 +1,8 @@
+from app.actuators import servo
 """
 Advanced slew-rate limiting and emergency bypass tests for actuators.
 Covers edge cases, rapid command changes, and repeated emergency triggers.
 """
-import pytest
 from app.actuators.servo import MechanicalMapper
 
 def test_slew_rate_limit_multiple_steps():
@@ -15,7 +15,7 @@ def test_slew_rate_limit_multiple_steps():
     mapper.target = 128.0
     max_step = (cv[47] - cv[46]) / (cv[49] / 50)  # 50Hz update
     # The first step may be a stiction breakout (kick), so skip it
-    prev = mapper.current
+    # prev = mapper.current  # Removed unused variable
     mapper.update(cv)  # First update may be a stiction kick
     for _ in range(9):
         prev = mapper.current
@@ -36,7 +36,7 @@ def test_emergency_bypass_repeated():
         mapper.target = 77.0
         mapper.emergency_mode = True
         mapper.update(cv)
-        assert mapper.current == 77.0
+        assert abs(mapper.current - 77.0) < 1e-6
         mapper.emergency_mode = False
         mapper.target = 128.0
         mapper.update(cv)

@@ -2,7 +2,6 @@
 # Only dependencies for the main app and testing (not sim tools)
 
 # Core
-micropython
 
 # BLE and serial (for MicroPython compatibility, use as stubs for local testing)
 pyserial

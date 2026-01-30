@@ -1,9 +1,9 @@
+from unittest.mock import MagicMock
 """
 BLE/telemetry disconnect and malformed packet tests.
 Covers BLE disconnects, malformed packets, and buffer overflow edge cases.
 """
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from app.ble_uart import BLE_UART
 
 def test_ble_disconnect_during_send():

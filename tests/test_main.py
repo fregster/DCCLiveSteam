@@ -1,4 +1,3 @@
-import contextlib
 # Patch Watchdog globally for all tests that instantiate Locomotive or run
 import pytest
 from unittest.mock import patch
@@ -10,8 +9,10 @@ from unittest.mock import patch
 def _patch_watchdog():
     class DummyWatchdog:
         def __init__(self, *args, **kwargs):
+            # DummyWatchdog: intentionally does nothing for test isolation
             pass
         def check(self, *args, **kwargs):
+            # DummyWatchdog: intentionally does nothing for test isolation
             pass
     return patch('app.main.Watchdog', new=DummyWatchdog)
 
@@ -31,10 +32,7 @@ Why: Main orchestrator coordinates all subsystems. Integration tests verify
 sensor→physics→actuator pipeline functions correctly.
 """
 import pytest
-import json
-import time
-import sys
-from unittest.mock import Mock, MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch, mock_open
 
 
 
@@ -163,7 +161,7 @@ def test_die_saves_black_box_to_flash(cv_table, mock_subsystems):
 
         # Verify log write was queued (non-blocking)
         file_queue.enqueue.assert_called()
-        args, kwargs = file_queue.enqueue.call_args
+        args, _ = file_queue.enqueue.call_args
         assert args[0][0] == "error_log.json"
         assert args[0][2] is True  # Emergency logs are high priority
 
@@ -350,9 +348,8 @@ def test_control_loop_sensor_read_order(cv_table, mock_subsystems):
     Safety: Watchdog checks must use same sensor values as physics calculations.
     """
     from app.main import Locomotive
-    loco = Locomotive(cv_table)
+    _ = Locomotive(cv_table)
     mock_sensors_inst = mock_subsystems['sensors'].return_value
-    
     # Verify sensor methods exist (called during loop)
     assert hasattr(mock_sensors_inst, 'read_temps')
     assert hasattr(mock_sensors_inst, 'read_track_voltage')
@@ -380,6 +377,7 @@ def test_control_loop_watchdog_check_called(cv_table, mock_subsystems):
 
     class WatchdogMock:
         def __init__(self, *args, **kwargs):
+            # WatchdogMock: intentionally does nothing for test isolation
             pass
         def check(self, *args, **kwargs):
             check_side_effect()
@@ -388,22 +386,35 @@ def test_control_loop_watchdog_check_called(cv_table, mock_subsystems):
         return patch('app.main.Watchdog', new=WatchdogMock), patch('app.safety.Watchdog', new=WatchdogMock)
 
     def patch_main_mocks():
-        return [
-            patch('app.main.MechanicalMapper'),
-            patch('app.main.DCCDecoder'),
-            patch('app.main.SensorSuite'),
-            patch('app.main.PhysicsEngine'),
-            patch('app.main.PressureController'),
-            patch('app.main.BLE_UART'),
-            patch('app.main.CachedSensorReader'),
-            patch('app.main.SerialPrintQueue'),
-            patch('app.main.FileWriteQueue'),
-            patch('app.main.GarbageCollector'),
-            patch('app.main.ensure_environment'),
-            patch('app.main.load_cvs', return_value=cv_table),
-            patch('app.main.time.sleep_ms'),
-            patch('app.main.gc.mem_free', return_value=100000),
-        ]
+            class DummyActuators:
+                def __init__(self, *args, **kwargs):
+                    self.boiler_pwm = 0
+                    self.superheater_pwm = 0
+                    self.servo_current = 0
+                    self.servo_target = 0
+                def set_regulator(self, percent, direction):
+                    pass
+                def set_boiler_duty(self, value):
+                    pass
+                def set_superheater_duty(self, value):
+                    pass
+            return [
+                patch('app.main.MechanicalMapper'),
+                patch('app.main.DCCDecoder'),
+                patch('app.main.SensorSuite'),
+                patch('app.main.PhysicsEngine'),
+                patch('app.main.PressureController'),
+                patch('app.main.BLE_UART'),
+                patch('app.main.CachedSensorReader'),
+                patch('app.main.SerialPrintQueue'),
+                patch('app.main.FileWriteQueue'),
+                patch('app.main.GarbageCollector'),
+                patch('app.main.Actuators', new=DummyActuators),
+                patch('app.main.ensure_environment'),
+                patch('app.main.load_cvs', return_value=cv_table),
+                patch('app.main.time.sleep_ms'),
+                patch('app.main.gc.mem_free', return_value=100000),
+            ]
 
     def setup_mocks(mocks):
         mock_cached_inst = mocks[6].return_value
@@ -440,6 +451,11 @@ def test_control_loop_watchdog_check_called(cv_table, mock_subsystems):
 
         mock_mech_inst = mocks[0].return_value
         mock_mech_inst.current = 130.0
+        # Ensure PowerManager actuator attributes are numeric to avoid MagicMock arithmetic errors
+        mock_mech_inst.boiler_pwm = 0
+        mock_mech_inst.superheater_pwm = 0
+        mock_mech_inst.servo_current = 0
+        mock_mech_inst.servo_target = 0
 
     importlib.invalidate_caches()
     importlib.reload(importlib.import_module('app.main'))

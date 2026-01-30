@@ -1,5 +1,8 @@
+
 import pytest
-from app.actuators import Actuators
+from unittest.mock import MagicMock, patch
+from app.actuators.__init__ import Actuators
+
 
 class DummyMech:
     def __init__(self):
@@ -11,40 +14,27 @@ class DummyMech:
     def update(self, _):
         self.current = self.target
 
+
 class DummyLED:
     pass
 
-class DummyHeater:
-    def __init__(self):
-        self.duty = 0
-    def set_duty(self, value):
-        self.duty = value
-    def off(self):
-        self.duty = 0
 
-class DummyHeaterActuators:
-    def __init__(self):
-        self.boiler = DummyHeater()
-        self.superheater = DummyHeater()
-    def set_boiler_duty(self, value):
-        self.boiler.set_duty(value)
-    def set_superheater_duty(self, value):
-        self.superheater.set_duty(value)
-    def all_off(self):
-        self.boiler.off()
-        self.superheater.off()
+@patch('app.actuators.__init__.BoilerHeaterPWM')
+@patch('app.actuators.__init__.SuperheaterHeaterPWM')
+def test_actuators_heater_split(mock_superheater, mock_boiler):
+    # Setup mocks
+    boiler_mock = MagicMock()
+    superheater_mock = MagicMock()
+    mock_boiler.return_value = boiler_mock
+    mock_superheater.return_value = superheater_mock
 
-def test_actuators_heater_split():
     mech = DummyMech()
-    heaters = DummyHeaterActuators()
     green_led = DummyLED()
     firebox_led = DummyLED()
-    # Patch Actuators to use dummy heaters
     a = Actuators(mech, green_led, firebox_led)
-    a.heaters = heaters
     a.set_boiler_duty(700)
     a.set_superheater_duty(350)
-    assert heaters.boiler.duty == 700
-    assert heaters.superheater.duty == 350
+    boiler_mock.set_duty.assert_called_with(700)
+    superheater_mock.set_duty.assert_called_with(350)
     a.all_off()
-    assert heaters.boiler.duty == 0
+    boiler_mock.off.assert_called()

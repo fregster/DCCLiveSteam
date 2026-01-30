@@ -1,7 +1,10 @@
+# Export MechanicalMapper for main.py and other modules
+from .servo import MechanicalMapper
 
-# Composite Actuators interface for all managers
 
-from .heater import HeaterActuators
+# Import new heater modules
+from .boiler_heater import BoilerHeaterPWM
+from .superheater_heater import SuperheaterHeaterPWM
 
 class Actuators:
     """
@@ -10,7 +13,8 @@ class Actuators:
     """
     def __init__(self, mech, green_led, firebox_led):
         self.mech = mech
-        self.heaters = HeaterActuators()
+        self.boiler_heater = BoilerHeaterPWM()
+        self.superheater_heater = SuperheaterHeaterPWM()
         self.green_led = green_led
         self.firebox_led = firebox_led
         self._boiler_pwm = 0
@@ -26,18 +30,22 @@ class Actuators:
     def superheater_pwm(self):
         return self._superheater_pwm
 
+
     def set_boiler_duty(self, value):
         value = max(0, min(1023, value))
         self._boiler_pwm = value
-        self.heaters.set_boiler_duty(value)
+        self.boiler_heater.set_duty(value)
+
 
     def set_superheater_duty(self, value):
         value = max(0, min(1023, value))
         self._superheater_pwm = value
-        self.heaters.set_superheater_duty(value)
+        self.superheater_heater.set_duty(value)
+
 
     def all_off(self):
-        self.heaters.all_off()
+        self.boiler_heater.off()
+        self.superheater_heater.off()
         self._boiler_pwm = 0
         self._superheater_pwm = 0
 
@@ -45,7 +53,7 @@ class Actuators:
         self.mech.set_goal(percent, direction, None)
         self.mech.update(None)
 
-    def safety_shutdown(self, cause):
+    def safety_shutdown(self):
         self.all_off()
         self.mech.emergency_mode = True
         # Optionally trigger LEDs, log, etc.
@@ -55,4 +63,3 @@ Actuators package: servo, heater, leds, pressure, etc.
 """
 
 
-import time

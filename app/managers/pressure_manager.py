@@ -7,19 +7,19 @@ import time
 
 class PressureManager:
     """
-    Manages boiler pressure and staged superheater logic using HeaterActuators.
+    Manages boiler pressure and staged superheater logic using actuator interface.
 
     Why:
         Ensures safe, efficient steam generation. Superheater is staged based on boiler pressure and regulator state to avoid power starvation and thermal shock.
 
     Args:
-        actuators: HeaterActuators interface (boiler, superheater)
+        actuators: Actuators interface (boiler, superheater)
         cv: Configuration variables (must include CV33, CV35, CV43)
         interval_ms: Update interval (ms)
 
     Fallback/Degraded Mode:
         - If pressure sensor is unavailable or fails, pressure_sensor_available is set False and logic falls back to temperature-only safety:
-            * Boiler heater OFF if superheater_temp > limit-10°C, else ON at 30% duty.
+            * Boiler heater OFF if boiler_temp > limit-5°C, else ON at 30% duty.
             * Superheater OFF if temp > limit, else ON at 25% duty.
         - If temperature sensors fail, system must shut down for safety.
 
@@ -30,10 +30,10 @@ class PressureManager:
         None
 
     Safety:
-        Superheater is OFF at low pressure, staged to 25%/50%/100% as pressure and regulator state allow. All PWM values clamped. Boiler always prioritised.
+        Superheater is OFF at low pressure, staged to 25%/50%/90% as pressure and DCC speed allow. All PWM values clamped. Boiler always prioritised.
 
     Example:
-        >>> pm = PressureManager(heaters, cv)
+        >>> pm = PressureManager(actuators, cv)
         >>> pm.process(10.0, 0, 0.0, 0.02)  # 10 PSI, regulator closed
     """
     def __init__(self, actuators: Any, cv: dict, interval_ms: int = 500):
@@ -54,7 +54,7 @@ class PressureManager:
         # Sensor health flag: if pressure sensor is unavailable or fails, fallback to temp-only safety
         self.pressure_sensor_available = True
 
-    def process(self, current_psi: float, regulator_open: int, superheater_temp: float, dt: float) -> None:
+    def process(self, current_psi: float, regulator_open: int, superheater_temp: float, dt: float, dcc_speed: float = 0.0) -> None:
         """
         Main control loop for pressure and superheater staging.
 
@@ -78,13 +78,18 @@ class PressureManager:
         """
         # If pressure sensor is unavailable, skip pressure-based logic and use temp-only safety
         if not self.pressure_sensor_available:
-            # Conservative fallback: boiler heater OFF if superheater_temp > limit-10, else ON at 30%
-            if superheater_temp >= self.superheater_temp_limit - 10:
+            # Use boiler temperature for boiler heater, superheater temp for superheater
+            boiler_temp = self.cv.get('boiler_temp', 0.0)  # Should be passed in or read from sensors
+            superheater_temp = self.cv.get('superheater_temp', 0.0)
+            boiler_temp_limit = self.cv.get('boiler_temp_limit', 110.0)  # CV42 default
+            superheater_temp_limit = self.superheater_temp_limit
+            # Boiler heater OFF if boiler temp > limit-5, else ON at 30%
+            if boiler_temp >= boiler_temp_limit - 5:
                 self.actuators.set_boiler_duty(0)
             else:
                 self.actuators.set_boiler_duty(int(0.3 * 1023))
             # Superheater OFF if temp > limit, else ON at 25%
-            if superheater_temp >= self.superheater_temp_limit:
+            if superheater_temp >= superheater_temp_limit:
                 self.actuators.set_superheater_duty(0)
             else:
                 self.actuators.set_superheater_duty(int(0.25 * 1023))
@@ -103,31 +108,35 @@ class PressureManager:
             derivative = (error - self.last_error) / dt if dt > 0 else 0
             self.last_error = error
             output = (self.kp * error) + (self.ki * self.integral) + (self.kd * derivative)
-            boiler_duty = int(max(0, min(1023, output * 10.23)))
-            self.actuators.set_boiler_duty(boiler_duty)
+            # --- New staged logic: ---
+            # 1. If pressure < 50% of target: all power to boiler, superheater OFF
+            # 2. If pressure >= 50% and < 75%: boiler at PID, superheater 25%
+            # 3. If pressure >= 75% and < 90%: boiler at PID, superheater 50%
+            # 4. If pressure >= 90% and DCC speed > 0: boiler at PID, superheater 90%
+            # 5. If pressure >= 90% and DCC speed == 0: superheater 50%
+            # 6. Blowdown spike: if regulator just opened, spike to 100% for 1s
+            # 7. All PWM values clamped
 
-            # --- Staged Superheater Logic ---
-            # 1. If pressure < 10% of target: superheater OFF
-            # 2. If pressure < 50% of target: superheater 25% duty
-            # 3. If pressure < 90% of target: superheater 50% duty
-            # 4. If regulator just opened: spike to 100% for 1s
-            # 5. Otherwise: maintain superheater temp (PID, not implemented here)
-
-            superheater_duty = 0
             pressure_ratio = current_psi / max(1.0, self.target_psi)
-            if pressure_ratio < 0.1:
+            boiler_duty = int(max(0, min(1023, output * 10.23)))
+            superheater_duty = 0
+
+            if pressure_ratio < 0.5:
+                # All power to boiler, superheater OFF
+                boiler_duty = 1023
                 superheater_duty = 0
-            elif pressure_ratio < 0.5:
+            elif pressure_ratio < 0.75:
+                # Boiler at PID, superheater 25%
                 superheater_duty = int(0.25 * 1023)
             elif pressure_ratio < 0.9:
+                # Boiler at PID, superheater 50%
                 superheater_duty = int(0.5 * 1023)
             else:
-                # Maintain superheater temp (simple proportional control)
-                temp_error = self.superheater_temp_limit - superheater_temp
-                if temp_error > 0:
-                    superheater_duty = min(1023, int(0.7 * 1023 + 0.3 * temp_error * 2))
+                # Boiler at PID, superheater 90% if DCC speed > 0, else 50%
+                if dcc_speed > 0:
+                    superheater_duty = int(0.9 * 1023)
                 else:
-                    superheater_duty = int(0.3 * 1023)  # Hold at 30% if over temp
+                    superheater_duty = int(0.5 * 1023)
 
             # Blowdown spike: if regulator just opened, spike to 100% for 1s
             if regulator_open:
@@ -138,20 +147,20 @@ class PressureManager:
                 if self.superheater_spike_timer <= 0:
                     self.superheater_spike_timer = 0
                     # After spike, recalculate duty for current state
-                    pressure_ratio = current_psi / max(1.0, self.target_psi)
-                    if pressure_ratio < 0.1:
+                    if pressure_ratio < 0.5:
+                        boiler_duty = 1023
                         superheater_duty = 0
-                    elif pressure_ratio < 0.5:
+                    elif pressure_ratio < 0.75:
                         superheater_duty = int(0.25 * 1023)
                     elif pressure_ratio < 0.9:
                         superheater_duty = int(0.5 * 1023)
                     else:
-                        temp_error = self.superheater_temp_limit - superheater_temp
-                        if temp_error > 0:
-                            superheater_duty = min(1023, int(0.7 * 1023 + 0.3 * temp_error * 2))
+                        if dcc_speed > 0:
+                            superheater_duty = int(0.9 * 1023)
                         else:
-                            superheater_duty = int(0.3 * 1023)
+                            superheater_duty = int(0.5 * 1023)
 
+            self.actuators.set_boiler_duty(boiler_duty)
             self.actuators.set_superheater_duty(superheater_duty)
         except Exception:
             # If pressure sensor fails at runtime, fallback to temp-only safety

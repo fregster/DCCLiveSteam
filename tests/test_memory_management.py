@@ -1,8 +1,8 @@
+from app.actuators import servo
 """
 Memory management and object reuse tests for safety-critical embedded system.
 Ensures heap usage is controlled and objects are reused in control loops.
 """
-import pytest
 import gc
 import unittest.mock
 from app.sensors import SensorSuite
@@ -17,12 +17,19 @@ def test_gc_mem_free_margin():
     Safety: Ensures system can run indefinitely without memory exhaustion.
     """
     # Patch gc.mem_free and gc.collect to accept any arguments and avoid TypeError
+    from unittest.mock import Mock
+    def mock_pin_factory(pin):
+        return Mock()
+    def mock_adc_factory(pin):
+        adc = Mock()
+        adc.read = Mock(return_value=2048)
+        return adc
     with unittest.mock.patch.object(gc, 'mem_free', side_effect=lambda *args, **kwargs: 20000), \
          unittest.mock.patch.object(gc, 'collect', side_effect=lambda *args, **kwargs: None):
         gc.collect()
-        before = gc.mem_free()
-        sensors = [SensorSuite() for _ in range(10)]
-        mappers = [MechanicalMapper({46:77,47:128,49:1000}) for _ in range(10)]
+        gc.mem_free()
+        [SensorSuite(adc_factory=mock_adc_factory, pin_factory=mock_pin_factory, encoder_hw=Mock()) for _ in range(10)]
+        [MechanicalMapper({46:77,47:128,49:1000}) for _ in range(10)]
         gc.collect()
         after = gc.mem_free()
         assert after > 10_000, f"Heap memory too low: {after} bytes"
@@ -33,7 +40,14 @@ def test_object_reuse_in_control_loop(monkeypatch):
     
     Why: Prevents memory leaks and fragmentation in 50Hz loop.
     """
-    sensors = SensorSuite()
+    from unittest.mock import Mock
+    def mock_pin_factory(pin):
+        return Mock()
+    def mock_adc_factory(pin):
+        adc = Mock()
+        adc.read = Mock(return_value=2048)
+        return adc
+    sensors = SensorSuite(adc_factory=mock_adc_factory, pin_factory=mock_pin_factory, encoder_hw=Mock())
     id_before = id(sensors)
     for _ in range(100):
         sensors.read_temps()

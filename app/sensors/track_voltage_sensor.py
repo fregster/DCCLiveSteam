@@ -1,8 +1,8 @@
 """
 Track voltage sensor reading logic.
 """
-from machine import ADC, Pin
-from ..config import PIN_TRACK, ADC_SAMPLES
+from machine import ADC
+from ..config import ADC_SAMPLES
 
 def _read_adc(adc: ADC) -> int:
     total = 0

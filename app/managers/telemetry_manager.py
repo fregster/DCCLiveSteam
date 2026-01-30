@@ -1,7 +1,6 @@
 """
 TelemetryManager: Handles BLE telemetry queueing and sending.
 """
-from ..ble_uart import BLE_UART
 from typing import Any, Tuple
 
 class TelemetryManager:

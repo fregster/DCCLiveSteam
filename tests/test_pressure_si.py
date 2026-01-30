@@ -1,4 +1,3 @@
-import pytest
 from app.actuators.pressure_controller import PressureController
 
 def make_cv(target_kpa=124.0, max_kpa=207.0):
@@ -19,7 +18,7 @@ def test_target_pressure_below_limit():
     assert hasattr(controller, 'target_psi')
 
 def test_pwm_stages_between_target_and_limit():
-    import sys
+ 
     from unittest.mock import patch, MagicMock
     with patch('app.actuators.pressure_controller.Pin', MagicMock()), \
          patch('app.actuators.pressure_controller.PWM', MagicMock()):

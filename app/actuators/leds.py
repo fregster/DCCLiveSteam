@@ -6,16 +6,20 @@ Contains:
     - FireboxLED: Error and warning indication
 """
 import time
-from typing import Optional
+from typing import Optional, Any
+from app.hardware_interfaces import IActuator
 
-class GreenStatusLED:
+class GreenStatusLED(IActuator):
     """
     Status LED controller for system state indication (boot, ready, DCC, motion).
     ...existing docstring from actuators.py...
     """
-    def __init__(self, pin, pwm=None):
-        self.pin = pin
-        self.pwm = pwm
+    def __init__(self, led_hw: Any):
+        """
+        Args:
+            led_hw: Hardware abstraction implementing set(value: bool)
+        """
+        self.led_hw = led_hw
         self.state = 'off'  # 'off', 'boot', 'solid', 'dcc_blink', 'moving'
         self.last_update = time.ticks_ms()
         self.blink_start = 0
@@ -70,11 +74,15 @@ class GreenStatusLED:
             self._set_led(False)
 
     def _set_led(self, on: bool) -> None:
-        """Sets the physical LED output state. ...existing docstring..."""
-        if self.pwm:
-            self.pwm.duty(1023 if on else 0)
-        else:
-            self.pin.value(1 if on else 0)
+        """Sets the LED output state via hardware abstraction."""
+        self.led_hw.set(on)
+
+    def set(self, value: Any) -> None:
+        """Implements IActuator interface."""
+        self._set_led(bool(value))
+
+    def status(self) -> Any:
+        return self.state
 
 
 # --- Status LED Manager (from status_led.py) ---
@@ -104,14 +112,17 @@ class StatusLEDManager:
             self.green_led.off()
         self.green_led.update()
 
-class FireboxLED:
+class FireboxLED(IActuator):
     """
     Firebox LED controller for error and warning indication.
     ...existing docstring from actuators.py...
     """
-    def __init__(self, pin, pwm=None, red_duty: int = 1023, orange_duty: int = 512):
-        self.pin = pin
-        self.pwm = pwm
+    def __init__(self, led_hw: Any, red_duty: int = 1023, orange_duty: int = 512):
+        """
+        Args:
+            led_hw: Hardware abstraction implementing set(value: bool, colour: Optional[str])
+        """
+        self.led_hw = led_hw
         self.red_duty = red_duty
         self.orange_duty = orange_duty
         self.state = 'off'  # 'off', 'red', 'orange', 'flash_red', 'flash_orange'
@@ -123,7 +134,11 @@ class FireboxLED:
         self.code = 0
 
     def set_error(self, code: int):
-        """Set error state: solid red for 5s, then flash red N times (N=code), repeat if error persists. ...existing docstring..."""
+        """
+        Set error state: solid red for 5s, then flash red N times (N=code).
+        Repeat if error persists.
+        ...existing docstring...
+        """
         self.state = 'red'
         self.code = code
         self.solid_start = time.ticks_ms()
@@ -132,7 +147,11 @@ class FireboxLED:
         self.flash_on = False
 
     def set_warning(self, code: int):
-        """Set warning state: solid orange for 5s, then flash orange N times (N=code), repeat if warning persists. ...existing docstring..."""
+        """
+        Set warning state: solid orange for 5s, then flash orange N times (N=code).
+        Repeat if warning persists.
+        ...existing docstring...
+        """
         if self.state != 'red':
             self.state = 'orange'
             self.code = code
@@ -182,13 +201,16 @@ class FireboxLED:
             self._set_led(True, colour)
 
     def _set_led(self, on: bool, colour: Optional[str] = None):
-        """Sets the physical LED output state. ...existing docstring..."""
-        if self.pwm:
-            if not on:
-                self.pwm.duty(0)
-            elif colour == 'red':
-                self.pwm.duty(self.red_duty)
-            elif colour == 'orange':
-                self.pwm.duty(self.orange_duty)
+        """Sets the LED output state via hardware abstraction."""
+        self.led_hw.set(on, colour)
+
+    def set(self, value: Any) -> None:
+        """Implements IActuator interface. Accepts (on, colour) tuple or bool."""
+        if isinstance(value, tuple):
+            on, colour = value
         else:
-            self.pin.value(1 if on else 0)
+            on, colour = bool(value), None
+        self._set_led(on, colour)
+
+    def status(self) -> Any:
+        return self.state

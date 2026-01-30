@@ -1,3 +1,4 @@
+from app.actuators import leds
 """
 Unit tests for StatusLEDManager (app/actuators/leds.py)
 """

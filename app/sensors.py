@@ -42,7 +42,8 @@ class SensorSuite:
         Initialises all sensor ADCs and health tracking.
 
         Why:
-            Sets up all ADCs and encoder pin for sensor reading. Applies correct attenuation to prevent over-voltage. Initialises health tracking for graceful degradation.
+            Sets up all ADCs and encoder pin for sensor reading. Applies correct attenuation to prevent
+            over-voltage. Initialises health tracking for graceful degradation.
 
         Args:
             None
@@ -54,7 +55,8 @@ class SensorSuite:
             None
 
         Safety:
-            Ensures all ADCs are configured for 0-3.3V. Health tracking allows continued operation with single failed sensor.
+            Ensures all ADCs are configured for 0-3.3V. Health tracking allows continued operation with
+            single failed sensor.
 
         Example:
             >>> sensors = SensorSuite()
@@ -185,17 +187,16 @@ class SensorSuite:
         if sensor_type == "boiler_temp":
             # Valid range: 0°C to 150°C (boiler operating range)
             return 0 <= reading <= 150
-        elif sensor_type == "super_temp":
+        if sensor_type == "super_temp":
             # Valid range: 0°C to 280°C (superheater, very hot)
             return 0 <= reading <= 280
-        elif sensor_type == "logic_temp":
+        if sensor_type == "logic_temp":
             # Valid range: 0°C to 100°C (TinyPICO die temperature)
             return 0 <= reading <= 100
-        elif sensor_type == "pressure":
+        if sensor_type == "pressure":
             # Valid range: -1 PSI to 30 PSI (atmosphere to safety relief)
             return -1 <= reading <= 30
-        else:
-            return False
+        return False
 
     def read_temps(self) -> Tuple[float, float, float]:
         """

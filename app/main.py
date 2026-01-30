@@ -2,18 +2,14 @@
 
 import json
 import time
-import machine
 import gc
 from .config import ensure_environment, load_cvs, GC_THRESHOLD, EVENT_BUFFER_SIZE
 from .dcc_decoder import DCCDecoder
 from .sensors import SensorSuite
-from .background_tasks import CachedSensorReader
-from .background_tasks import EncoderTracker
 from .physics import PhysicsEngine
-from .actuators.pressure_controller import PressureController
-from .actuators.servo import MechanicalMapper
-from .actuators.leds import FireboxLED, GreenStatusLED, StatusLEDManager
 from .actuators import Actuators
+from .actuators import MechanicalMapper
+from .actuators.pressure_controller import PressureController
 from .safety import Watchdog
 from .ble_uart import BLE_UART
 from .managers.power_manager import PowerManager
@@ -22,9 +18,13 @@ from .managers.pressure_manager import PressureManager
 from .managers.speed_manager import SpeedManager
 from .status_utils import StatusReporter
 
+# Expose for test patching
+from app.background_tasks import CachedSensorReader as CachedSensorReader
+
 
 class Locomotive:
     """
+
 
     Main orchestrator for the live steam locomotive control system.
 
@@ -37,7 +37,8 @@ class Locomotive:
 
     Args:
         cv: dict
-            Configuration variables (CVs) loaded from persistent storage (see docs/CV.md). Must include all required CVs for hardware, safety, and control parameters.
+            Configuration variables (CVs) loaded from persistent storage (see docs/CV.md). Must include all
+            required CVs for hardware, safety, and control parameters.
 
     Returns:
         None
@@ -46,8 +47,9 @@ class Locomotive:
         ValueError: If required CVs are missing or invalid during initialisation.
 
     Safety:
-        - All safety shutdowns are routed through die().
-        - Event buffer logs all critical events for black box recovery.
+
+                - All safety shutdowns are routed through die().
+                - Event buffer logs all critical events for black box recovery.
                 - Instantiates watchdog, servo slew-rate, and thermal/pressure limits as per
                     CVs.
                 - Emergency mode disables all actuators and enters deep sleep if required.
@@ -61,11 +63,15 @@ class Locomotive:
         Initialises all subsystems and hardware interfaces for the locomotive.
 
         Why:
-            Sets up all required modules (DCC, sensors, actuators, safety, BLE, logging) and prepares the event buffer and emergency state. Ensures all hardware and safety-critical logic is ready before entering the control loop.
+
+            Sets up all required modules (DCC, sensors, actuators, safety, BLE, logging)
+            and prepares the event buffer and emergency state. Ensures all hardware and
+            safety-critical logic is ready before entering the control loop.
 
         Args:
             cv: dict
-                Configuration variables (CVs) loaded from persistent storage. Must include all required CVs for hardware, safety, and control parameters (see docs/CV.md).
+                Configuration variables (CVs) loaded from persistent storage. Must include all required CVs for
+                hardware, safety, and control parameters (see docs/CV.md).
 
         Returns:
             None
@@ -80,32 +86,61 @@ class Locomotive:
         Example:
             >>> loco = Locomotive(cv)
         """
+
         self.cv = cv
         self.event_buffer = []
         self.last_encoder = 0
-        self.cached_sensors = CachedSensorReader(SensorSuite())
-        self.dcc = DCCDecoder(cv)
+
+        # Hardware abstractions
+
+        from app.sensors.factories import (
+            EncoderHardware as _EncoderHardware,
+            DCCPinHardware as _DCCPinHardware,
+            LEDHardware as _LEDHardware,
+            adc_factory as _adc_factory,
+            pin_factory as _pin_factory,
+        )
+        from app.background_tasks import (
+            SerialPrintQueue as _SerialPrintQueue,
+            FileWriteQueue as _FileWriteQueue,
+            GarbageCollector as _GarbageCollector,
+            CachedSensorReader as _CachedSensorReader,
+            EncoderTracker as _EncoderTracker,
+        )
+        from app.actuators.leds import (
+            GreenStatusLED as _GreenStatusLED,
+            FireboxLED as _FireboxLED,
+            StatusLEDManager as _StatusLEDManager,
+        )
+
+        self.encoder_tracker = _EncoderTracker(
+            pin_encoder=_EncoderHardware(self.cv.get('PIN_ENCODER', 14)))
+        self.cached_sensors = _CachedSensorReader(
+            SensorSuite(adc_factory=_adc_factory, pin_factory=_pin_factory, encoder_hw=self.encoder_tracker)
+        )
+        self.dcc = DCCDecoder(cv, pin=_DCCPinHardware(self.cv.get('PIN_DCC', 15)))
         self.physics = PhysicsEngine(cv)
         self.mech = MechanicalMapper(cv)
         self.pressure = PressureController(cv)
         self.wdt = Watchdog(cv)
-        self.serial_queue = SerialPrintQueue()
-        self.file_queue = file_queue if file_queue is not None else FileWriteQueue()
-        self.gc_manager = GarbageCollector()
-        self.firebox_led = FireboxLED(machine.Pin(self.cv.get('PIN_FIREBOX_LED', 12)), pwm=None)
-        self.green_led = GreenStatusLED(machine.Pin(self.cv.get('PIN_GREEN_LED', 13)), pwm=None)
+        self.serial_queue = _SerialPrintQueue()
+        self.file_queue = file_queue if file_queue is not None else _FileWriteQueue()
+        self.gc_manager = _GarbageCollector()
+
+        self.firebox_led = _FireboxLED(_LEDHardware(self.cv.get('PIN_FIREBOX_LED', 12)))
+        self.green_led = _GreenStatusLED(_LEDHardware(self.cv.get('PIN_GREEN_LED', 13)))
         # BLE_UART expects cv and self.serial_queue for logging
         self.ble = BLE_UART(name=str(cv.get('BLE_NAME', 'LiveSteam')))
         self.status_reporter = StatusReporter(self.serial_queue)
         # Actuators interface (to be implemented in actuators.py or as a composite class)
         self.actuators = Actuators(self.mech, self.green_led, self.firebox_led)
-        self.telemetry_manager = TelemetryManager(self.ble, self.actuators, self.status_reporter)
-        self.status_led_manager = StatusLEDManager(self.green_led)
+        self.telemetry_manager = TelemetryManager(
+            self.ble, self.actuators, self.status_reporter)
+        self.status_led_manager = _StatusLEDManager(self.green_led)
         self.pressure_manager = PressureManager(self.actuators, cv)
         self.power_manager = PowerManager(self.actuators, cv)
-        # Instantiate EncoderTracker for speed sensing
-        self.encoder_tracker = EncoderTracker(pin_encoder=machine.Pin(self.cv.get('PIN_ENCODER', 14)))
-        self.speed_manager = SpeedManager(self.actuators, cv, speed_sensor=self.encoder_tracker.get_velocity_cms)
+        self.speed_manager = SpeedManager(
+            self.actuators, cv, speed_sensor=self.encoder_tracker.get_velocity_cms)
         self.emergency_mode = False
 
         # Remove old PowerMonitor
@@ -117,7 +152,8 @@ class Locomotive:
         Logs an event to the in-memory event buffer for black box recovery.
 
         Why:
-            Maintains a rolling buffer of recent events (errors, warnings, state changes) for post-mortem analysis and safety audits. Ensures that critical events are not lost and can be written to flash on shutdown.
+            Maintains a rolling buffer of recent events (errors, warnings, state changes) for post-mortem analysis
+            and safety audits. Ensures that critical events are not lost and can be written to flash on shutdown.
 
         Args:
             event_type: str
@@ -139,7 +175,11 @@ class Locomotive:
             >>> loco.log_event('ERROR', {'code': 42, 'msg': 'Overheat'})
         """
         t = time.ticks_ms()
-        self.event_buffer.append({"type": event_type, "data": data, "t": t})
+        self.event_buffer.append({
+            "type": event_type,
+            "data": data,
+            "t": t
+        })
         if len(self.event_buffer) > EVENT_BUFFER_SIZE:
             self.event_buffer = self.event_buffer[-EVENT_BUFFER_SIZE:]
 
@@ -148,7 +188,9 @@ class Locomotive:
         Initiates a safety shutdown, disables all actuators, logs the event, and enters emergency mode.
 
         Why:
-            Provides a single, auditable path for all emergency shutdowns (thermal, pressure, signal loss, E-STOP). Ensures all actuators are secured, heaters are disabled, and a black box log is written to flash before entering deep sleep or emergency state.
+            Provides a single, auditable path for all emergency shutdowns (thermal, pressure, signal loss, E-STOP).
+            Ensures all actuators are secured, heaters are disabled, and a black box log is written to flash before
+            entering deep sleep or emergency state.
 
         Args:
             cause: str
@@ -191,6 +233,7 @@ class Locomotive:
         time.sleep(0.5)
         self.mech.servo.duty(0)
         if not force_close_only:
+            import machine
             machine.deepsleep()
 
     def process_ble_commands(self):

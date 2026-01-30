@@ -4,7 +4,7 @@
 
 | Part | RS Stock # | Unit Cost (£) | Qty | Subtotal (£) |
 |:-----|:-----------|:--------------|:----|:-------------|
-| TinyPICO | N/A (Pimoroni) | £18.00 | 1 | £18.00 |
+| Pimoroni TinyPICO ESP32 (ESP32-PICO-D4) | Pimoroni | £18.00 | 1 | £18.00 |
 | 6N137 | 298-5122 | £0.85 | 1 | £0.85 |
 | MP1584EN Module | 174-7171 | £2.50 | 1 | £2.50 |
 | IRLZ44N | 728-8025 | £0.65 | 2 | £1.30 |
@@ -47,7 +47,7 @@
 ## 4.1 Semiconductor & Modules
 | Part ID | Description | Model | Qty |
 | :--- | :--- | :--- | :--- |
-| MCU-1 | Microcontroller | TinyPICO (ESP32) | 1 |
+| MCU-1 | Microcontroller | Pimoroni TinyPICO ESP32 (ESP32-PICO-D4) | 1 |
 | OPTO-1 | Optocoupler | 6N137 | 1 |
 | PWR-1 | Buck Converter | MP1584EN | 1 |
 | FET-1/2 | MOSFET | IRLZ44N (TO-220) | 2 |

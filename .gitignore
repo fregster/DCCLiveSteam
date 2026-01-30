@@ -41,3 +41,5 @@ dist/
 # Project specific
 # Note: app/ folder contains deployment code and should be committed
 # Note: tests/ folder contains test suite and should be committed
+pylint_output.txt
+pylint_unused.txt
